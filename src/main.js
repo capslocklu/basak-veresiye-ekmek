@@ -157,6 +157,40 @@ function musteriEtiketToId(){
   });
   return map;
 }
+// Kendi tasarımım müşteri arama/seç kutusu: boşken hiçbir şey göstermez, yazdıkça
+// SADECE eşleşen müşterileri filtreleyip küçük bir liste olarak gösterir — tarayıcının
+// yerleşik <datalist>'i (boşken tüm listeyi birden açan) yerine bunu kullanıyoruz.
+function musteriAramaHtml(inputId, hiddenId, dropdownId, placeholder){
+  return `
+    <div style="position:relative">
+      <input id="${inputId}" autocomplete="off" placeholder="${placeholder||'Müşteri adı yazmaya başla...'}"
+        oninput="musteriAramaFiltrele('${inputId}','${dropdownId}','${hiddenId}')"
+        onfocus="musteriAramaFiltrele('${inputId}','${dropdownId}','${hiddenId}')">
+      <input type="hidden" id="${hiddenId}" value="">
+      <div id="${dropdownId}" style="display:none;position:absolute;top:calc(100% - 10px);left:0;right:0;background:#fff;border:1.5px solid var(--card-border);border-radius:10px;max-height:220px;overflow-y:auto;z-index:20;box-shadow:0 6px 18px rgba(0,0,0,0.15);"></div>
+    </div>`;
+}
+function musteriAramaFiltrele(inputId, dropdownId, hiddenId){
+  const q = document.getElementById(inputId).value.trim().toLowerCase();
+  const dropdown = document.getElementById(dropdownId);
+  if(!q){ dropdown.style.display='none'; dropdown.innerHTML=''; return; }
+  const eslesenler = DATA.musteriler.filter(m=>m.ad.toLowerCase().includes(q)).slice(0,8);
+  if(!eslesenler.length){
+    dropdown.innerHTML = `<div style="padding:10px 12px;font-size:13px;color:var(--muted)">Eşleşen müşteri yok.</div>`;
+    dropdown.style.display='block';
+    return;
+  }
+  dropdown.innerHTML = eslesenler.map(m=>`
+    <div style="padding:10px 12px;font-size:14px;border-bottom:1px solid var(--card-border);cursor:pointer"
+      onmousedown="musteriAramaSec('${inputId}','${dropdownId}','${hiddenId}','${m.id}')">${m.ad}</div>
+  `).join('');
+  dropdown.style.display='block';
+}
+function musteriAramaSec(inputId, dropdownId, hiddenId, musteriId){
+  document.getElementById(inputId).value = musteriAdi(musteriId);
+  document.getElementById(hiddenId).value = musteriId;
+  document.getElementById(dropdownId).style.display = 'none';
+}
 function isPatron(){ return !currentUser || currentUser.role !== 'personel'; }
 // personel için hangi müşterilerin bakiye/borç bilgisini görebileceğini döner; patron için null
 // (null = kısıtlama yok, hepsini görür).
@@ -327,6 +361,7 @@ function renderOzetTab(main){
     <div class="card">
       <h2>Hızlı İşlem</h2>
       <button class="btn btn-primary btn-block" onclick="acYeniKayitModal()">➕ Yeni Veresiye Kaydı</button>
+      <button class="btn btn-ghost btn-block" style="margin-top:8px" onclick="acGenelOdemeModal()">💳 Ödeme Al</button>
     </div>
     <div class="card">
       <h2>En Çok Borçlu 5 Müşteri</h2>
@@ -348,16 +383,13 @@ function renderMusteriMiniListe(musteriler){
 function acYeniKayitModal(){
   if(!DATA.musteriler.length){ toast('Önce bir müşteri ekle'); return; }
   if(!DATA.ekmekTurleri.length){ toast('Önce bir ekmek türü ekle'); return; }
-  window._kayitMusteriEtiketToId = musteriEtiketToId();
   const turOpts = DATA.ekmekTurleri.map(t=>`<option value="${t.id}" data-fiyat="${t.fiyat}">${t.ad} (₺${fmt(t.fiyat)})</option>`).join('');
-  const musteriOptions = Object.keys(window._kayitMusteriEtiketToId).map(et=>`<option value="${et}">`).join('');
   showModal(`
     <button class="modalClose" onclick="closeModal()">✕</button>
     <h3>Yeni Veresiye Kaydı</h3>
     <label>Müşteri</label>
-    <input id="kMusteriArama" list="kMusteriListesi" value="" placeholder="Müşteri adı yazmaya başla..." oninput="kayitMusteriSecildi()" onchange="kayitMusteriSecildi()">
-    <datalist id="kMusteriListesi">${musteriOptions}</datalist>
-    <input type="hidden" id="kMusteriId" value="">
+    ${musteriAramaHtml('kMusteriArama','kMusteriId','kMusteriDropdown')}
+    <div style="height:12px"></div>
     <label>Ekmek Türü</label>
     <select id="kTur" onchange="kayitFiyatGuncelle()">${turOpts}</select>
     <label>Adet</label>
@@ -374,11 +406,6 @@ function acYeniKayitModal(){
   `);
   kayitFiyatGuncelle();
   setTimeout(()=>document.getElementById('kMusteriArama').focus(), 50);
-}
-function kayitMusteriSecildi(){
-  const etiket = document.getElementById('kMusteriArama').value;
-  const id = window._kayitMusteriEtiketToId[etiket];
-  if(id) document.getElementById('kMusteriId').value = id;
 }
 function kayitFiyatGuncelle(){
   const sel = document.getElementById('kTur');
@@ -520,6 +547,35 @@ function odemeGecmisiModal(musteriId){
     <table><thead><tr><th>Tarih</th><th>Tutar</th><th>Not</th></tr></thead>
     <tbody>${rows || `<tr><td colspan="3"><div class="empty">Henüz ödeme kaydı yok.</div></td></tr>`}</tbody></table>
   `);
+}
+// Belirli bir müşteri için değil, herhangi bir müşteriyi ARAYIP SEÇEREK tahsilat girebileceğin
+// genel amaçlı ödeme penceresi — Özet'teki "Ödeme Al" hızlı işleminden açılır. Müşteri Borçlar
+// listesinde görünmüyorsa (örn. bakiyesi zaten kapalıysa) bile buradan ödeme girilebilir.
+function acGenelOdemeModal(){
+  if(!DATA.musteriler.length){ toast('Önce bir müşteri ekle'); return; }
+  showModal(`
+    <button class="modalClose" onclick="closeModal()">✕</button>
+    <h3>Ödeme Al</h3>
+    <label>Müşteri</label>
+    ${musteriAramaHtml('goMusteriArama','goMusteriId','goMusteriDropdown')}
+    <div style="height:12px"></div>
+    <label>Tutar (₺)</label>
+    <input id="goTutar" type="number" step="0.01">
+    <label>Not (opsiyonel)</label>
+    <input id="goNot" placeholder="örn: elden nakit">
+    <button class="btn btn-primary btn-block" onclick="kaydetGenelOdeme()">Kaydet</button>
+  `);
+  setTimeout(()=>document.getElementById('goMusteriArama').focus(), 50);
+}
+function kaydetGenelOdeme(){
+  const musteriId = document.getElementById('goMusteriId').value;
+  const tutar = Number(document.getElementById('goTutar').value);
+  const not = document.getElementById('goNot').value.trim();
+  if(!musteriId){ toast('Listeden bir müşteri seç'); return; }
+  if(!musteriBakiyeGorulebilir(musteriId)){ toast('Bu müşteri için yetkin yok'); return; }
+  if(!tutar || tutar<=0){ toast('Geçerli bir tutar gir'); return; }
+  DATA.odemeler.push({id:'o_'+Date.now(), musteriId, tutar, tarih:todayISO(), not});
+  persist(); closeModal(); toast('Tahsilat kaydedildi ✓'); renderTab(activeTab);
 }
 function odemeAlModal(musteriId){
   if(!musteriBakiyeGorulebilir(musteriId)){ toast('Bu müşteri için yetkin yok'); return; }
@@ -1085,6 +1141,7 @@ document.getElementById('modalBg').addEventListener('click', e=>{
 // window üzerinde bulunmasını bekliyor. Bu yüzden aşağıda TÜM üst seviye
 // fonksiyonları tek tek window'a bağlıyoruz.
 // ---------------------------------------------------------------------
+window.acGenelOdemeModal = acGenelOdemeModal;
 window.acYeniKayitModal = acYeniKayitModal;
 window.baglantiRozetiGuncelle = baglantiRozetiGuncelle;
 window.buildTabs = buildTabs;
@@ -1108,14 +1165,17 @@ window.gorunurBakiyeMusteriIdleri = gorunurBakiyeMusteriIdleri;
 window.gunlukGirisGrupla = gunlukGirisGrupla;
 window.gunlukGirisKaydet = gunlukGirisKaydet;
 window.isPatron = isPatron;
+window.kaydetGenelOdeme = kaydetGenelOdeme;
 window.kaydetOdeme = kaydetOdeme;
 window.kaydetTopluMusteri = kaydetTopluMusteri;
 window.kaydetYeniKayit = kaydetYeniKayit;
 window.kayitFiyatGuncelle = kayitFiyatGuncelle;
-window.kayitMusteriSecildi = kayitMusteriSecildi;
 window.kullaniciAdiCoz = kullaniciAdiCoz;
 window.musteriAdi = musteriAdi;
+window.musteriAramaFiltrele = musteriAramaFiltrele;
 window.musteriAramaGuncelle = musteriAramaGuncelle;
+window.musteriAramaHtml = musteriAramaHtml;
+window.musteriAramaSec = musteriAramaSec;
 window.musteriBakiye = musteriBakiye;
 window.musteriBakiyeGorulebilir = musteriBakiyeGorulebilir;
 window.musteriEtiketToId = musteriEtiketToId;
