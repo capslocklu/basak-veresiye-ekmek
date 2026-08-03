@@ -349,17 +349,15 @@ function acYeniKayitModal(){
   if(!DATA.musteriler.length){ toast('Önce bir müşteri ekle'); return; }
   if(!DATA.ekmekTurleri.length){ toast('Önce bir ekmek türü ekle'); return; }
   window._kayitMusteriEtiketToId = musteriEtiketToId();
-  const ilkMusteri = DATA.musteriler[0];
-  const ilkEtiket = Object.keys(window._kayitMusteriEtiketToId).find(k=>window._kayitMusteriEtiketToId[k]===ilkMusteri.id);
   const turOpts = DATA.ekmekTurleri.map(t=>`<option value="${t.id}" data-fiyat="${t.fiyat}">${t.ad} (₺${fmt(t.fiyat)})</option>`).join('');
   const musteriOptions = Object.keys(window._kayitMusteriEtiketToId).map(et=>`<option value="${et}">`).join('');
   showModal(`
     <button class="modalClose" onclick="closeModal()">✕</button>
     <h3>Yeni Veresiye Kaydı</h3>
     <label>Müşteri</label>
-    <input id="kMusteriArama" list="kMusteriListesi" value="${ilkEtiket||''}" placeholder="Müşteri adı yazmaya başla..." oninput="kayitMusteriSecildi()" onchange="kayitMusteriSecildi()">
+    <input id="kMusteriArama" list="kMusteriListesi" value="" placeholder="Müşteri adı yazmaya başla..." oninput="kayitMusteriSecildi()" onchange="kayitMusteriSecildi()">
     <datalist id="kMusteriListesi">${musteriOptions}</datalist>
-    <input type="hidden" id="kMusteriId" value="${ilkMusteri.id}">
+    <input type="hidden" id="kMusteriId" value="">
     <label>Ekmek Türü</label>
     <select id="kTur" onchange="kayitFiyatGuncelle()">${turOpts}</select>
     <label>Adet</label>
@@ -375,7 +373,7 @@ function acYeniKayitModal(){
     <button class="btn btn-primary btn-block" onclick="kaydetYeniKayit()">Kaydet</button>
   `);
   kayitFiyatGuncelle();
-  setTimeout(()=>document.getElementById('kAdet').focus(), 50);
+  setTimeout(()=>document.getElementById('kMusteriArama').focus(), 50);
 }
 function kayitMusteriSecildi(){
   const etiket = document.getElementById('kMusteriArama').value;
@@ -394,6 +392,7 @@ function kaydetYeniKayit(){
   const fiyat = Number(document.getElementById('kFiyat').value);
   const tarih = document.getElementById('kTarih').value || todayISO();
   const odendi = document.getElementById('kOdendi').checked;
+  if(!musteriId){ toast('Listeden bir müşteri seç'); return; }
   if(!adet || adet<=0){ toast('Geçerli bir adet gir'); return; }
   DATA.kayitlar.push({
     id:'k_'+Date.now(), musteriId, turId, adet, birimFiyat:fiyat, tarih, odendi
@@ -468,26 +467,59 @@ function silKayit(kayitId){
 }
 
 /* ---------------- BORÇLAR / VERESİYE ---------------- */
+function musteriToplamBorc(musteriId){
+  return DATA.kayitlar.filter(k=>k.musteriId===musteriId && !k.odendi).reduce((s,k)=>s+k.adet*k.birimFiyat,0);
+}
+function musteriToplamOdenen(musteriId){
+  return DATA.odemeler.filter(o=>o.musteriId===musteriId).reduce((s,o)=>s+o.tutar,0);
+}
 function renderBorclarTab(main){
   const musteriler = DATA.musteriler.filter(m=>musteriBakiye(m.id)!==0 && musteriBakiyeGorulebilir(m.id))
     .sort((a,b)=>musteriBakiye(b.id)-musteriBakiye(a.id));
   const rows = musteriler.map(m=>{
     const bakiye = musteriBakiye(m.id);
+    const toplamBorc = musteriToplamBorc(m.id);
+    const toplamOdenen = musteriToplamOdenen(m.id);
     return `<tr>
       <td>${m.ad}${m.telefon?`<br><a href="tel:${m.telefon.replace(/\s+/g,'')}" style="font-size:11px;color:var(--crust);text-decoration:none">📞 ${m.telefon}</a>`:''}</td>
+      <td style="font-size:12px;color:var(--muted)">
+        Borç: ₺${fmt(toplamBorc)}<br>Ödenen: ₺${fmt(toplamOdenen)}
+      </td>
       <td>${bakiye>0 ? `<span class="pill pill-debt">₺${fmt(bakiye)} borçlu</span>` : `<span class="pill pill-paid">₺${fmt(-bakiye)} alacaklı</span>`}</td>
-      <td class="rowActions">
+      <td class="rowActions" style="white-space:nowrap">
         <button class="btn btn-ghost" onclick="odemeAlModal('${m.id}')">Tahsilat</button>
+        <button class="iconbtn" onclick="odemeGecmisiModal('${m.id}')" title="Ödeme geçmişi">🧾</button>
       </td>
     </tr>`;
   }).join('');
   main.innerHTML = `
     <div class="card">
       <h2>Borçlar</h2>
-      <table><thead><tr><th>Müşteri</th><th>Durum</th><th></th></tr></thead>
-      <tbody>${rows || `<tr><td colspan="3"><div class="empty">Açık veresiye yok 🎉</div></td></tr>`}</tbody></table>
+      <p style="font-size:12px;color:var(--muted);margin:-4px 0 10px">
+        "Borç" = veresiye yazılan tüm teslimatların toplamı, "Ödenen" = bugüne kadar aldığın tüm
+        tahsilatların toplamı. "Bakiye" ikisi arasındaki farktır — tahsilat aldıkça otomatik düşer.
+      </p>
+      <table><thead><tr><th>Müşteri</th><th>Döküm</th><th>Bakiye</th><th></th></tr></thead>
+      <tbody>${rows || `<tr><td colspan="4"><div class="empty">Açık veresiye yok 🎉</div></td></tr>`}</tbody></table>
     </div>
   `;
+}
+function odemeGecmisiModal(musteriId){
+  if(!musteriBakiyeGorulebilir(musteriId)){ toast('Bu müşteri için yetkin yok'); return; }
+  const odemeler = DATA.odemeler.filter(o=>o.musteriId===musteriId).sort((a,b)=>a.tarih<b.tarih?1:-1);
+  const rows = odemeler.map(o=>`
+    <tr><td>${o.tarih}</td><td>₺${fmt(o.tutar)}</td><td>${o.not||'—'}</td></tr>
+  `).join('');
+  showModal(`
+    <button class="modalClose" onclick="closeModal()">✕</button>
+    <h3>${musteriAdi(musteriId)} — Ödeme Geçmişi</h3>
+    <p style="font-size:12.5px;color:var(--muted);margin:0 0 10px">
+      Toplam Borç: ₺${fmt(musteriToplamBorc(musteriId))} · Toplam Ödenen: ₺${fmt(musteriToplamOdenen(musteriId))} ·
+      Güncel Bakiye: ₺${fmt(musteriBakiye(musteriId))}
+    </p>
+    <table><thead><tr><th>Tarih</th><th>Tutar</th><th>Not</th></tr></thead>
+    <tbody>${rows || `<tr><td colspan="3"><div class="empty">Henüz ödeme kaydı yok.</div></td></tr>`}</tbody></table>
+  `);
 }
 function odemeAlModal(musteriId){
   if(!musteriBakiyeGorulebilir(musteriId)){ toast('Bu müşteri için yetkin yok'); return; }
@@ -906,7 +938,7 @@ function renderGunlukGirisTab(main){
       if(!t) return '';
       const deger = girisAdetleri[s.id];
       return `
-      <div style="flex:1;min-width:90px">
+      <div style="margin-bottom:8px">
         <div style="font-size:11px;color:var(--muted);margin-bottom:3px">${t.ad}</div>
         <input type="number" min="0" inputmode="numeric" placeholder="—" value="${deger===undefined||deger===''?'':deger}"
           oninput="girisAdetleri['${s.id}']=this.value===''?'':Number(this.value)"
@@ -914,15 +946,15 @@ function renderGunlukGirisTab(main){
       </div>`;
     }).join('');
     return `
-    <div class="card" style="margin-bottom:10px">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px">
-        <b>${m.ad}</b>
-        <label style="font-size:11.5px;font-weight:500;display:flex;align-items:center;gap:4px;white-space:nowrap;color:var(--text)">
+    <div class="card" style="margin-bottom:0;padding:14px">
+      <div style="margin-bottom:8px">
+        <b style="font-size:14px">${m.ad}</b>
+        <label style="font-size:11px;font-weight:500;display:flex;align-items:center;gap:4px;white-space:nowrap;color:var(--text);margin-top:4px">
           <input type="checkbox" style="width:auto;margin:0" ${odendi?'checked':''} onchange="girisOdendi['${g.musteriId}']=this.checked">
           Bugün Ödendi
         </label>
       </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">${hucreler}</div>
+      ${hucreler}
     </div>`;
   }).join('');
   main.innerHTML = `
@@ -932,7 +964,7 @@ function renderGunlukGirisTab(main){
       <input type="date" value="${girisTarih}" max="${todayISO()}" onchange="degistirGunlukGirisTarihi(this.value)">
       ${gecmisMi ? `<p style="font-size:11.5px;color:var(--crust);margin:0">📅 Geçmiş bir tarih için giriş yapıyorsun.</p>` : ''}
     </div>
-    ${gruplarHtml}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">${gruplarHtml}</div>
     <button class="btn btn-primary btn-block" onclick="gunlukGirisKaydet()">✓ Tümünü Kaydet</button>
   `;
 }
@@ -1088,7 +1120,10 @@ window.musteriBakiye = musteriBakiye;
 window.musteriBakiyeGorulebilir = musteriBakiyeGorulebilir;
 window.musteriEtiketToId = musteriEtiketToId;
 window.musteriSatirlariniOlustur = musteriSatirlariniOlustur;
+window.musteriToplamBorc = musteriToplamBorc;
+window.musteriToplamOdenen = musteriToplamOdenen;
 window.odemeAlModal = odemeAlModal;
+window.odemeGecmisiModal = odemeGecmisiModal;
 window.persist = persist;
 window.raporDonemDegisti = raporDonemDegisti;
 window.raporOzelTarihGuncelle = raporOzelTarihGuncelle;
