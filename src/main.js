@@ -953,12 +953,12 @@ function sablonAsagi(id){
 
 /* ---------------- GÜNLÜK GİRİŞ (kolay, hızlı adet girişi) ---------------- */
 let girisTarih = todayISO();
-let girisAdetleri = {}; // {sablonId: adet}
-let girisOdendi = {};   // {musteriId: true|false}
+window.girisAdetleri = {}; // {sablonId: adet} — window'a bağlı: inline oninput/onchange bunlara doğrudan erişebilsin
+window.girisOdendi = {};   // {musteriId: true|false}
 function degistirGunlukGirisTarihi(val){
   girisTarih = val || todayISO();
-  girisAdetleri = {};
-  girisOdendi = {};
+  window.girisAdetleri = {};
+  window.girisOdendi = {};
   renderTab('gunlukgiris');
 }
 function gunlukGirisGrupla(){
@@ -988,16 +988,16 @@ function renderGunlukGirisTab(main){
   const gruplarHtml = gruplar.map(g=>{
     const m = DATA.musteriler.find(x=>x.id===g.musteriId);
     if(!m) return '';
-    const odendi = girisOdendi[g.musteriId]===undefined ? false : girisOdendi[g.musteriId];
+    const odendi = window.girisOdendi[g.musteriId]===undefined ? false : window.girisOdendi[g.musteriId];
     const hucreler = g.satirlar.map(s=>{
       const t = DATA.ekmekTurleri.find(x=>x.id===s.turId);
       if(!t) return '';
-      const deger = girisAdetleri[s.id];
+      const deger = window.girisAdetleri[s.id];
       return `
       <div style="margin-bottom:8px">
         <div style="font-size:11px;color:var(--muted);margin-bottom:3px">${t.ad}</div>
         <input type="number" min="0" inputmode="numeric" placeholder="—" value="${deger===undefined||deger===''?'':deger}"
-          oninput="girisAdetleri['${s.id}']=this.value===''?'':Number(this.value)"
+          oninput="window.girisAdetleri['${s.id}']=this.value===''?'':Number(this.value)"
           style="margin-bottom:0;padding:9px 8px;text-align:center;font-weight:600;">
       </div>`;
     }).join('');
@@ -1006,7 +1006,7 @@ function renderGunlukGirisTab(main){
       <div style="margin-bottom:8px">
         <b style="font-size:14px">${m.ad}</b>
         <label style="font-size:11px;font-weight:500;display:flex;align-items:center;gap:4px;white-space:nowrap;color:var(--text);margin-top:4px">
-          <input type="checkbox" style="width:auto;margin:0" ${odendi?'checked':''} onchange="girisOdendi['${g.musteriId}']=this.checked">
+          <input type="checkbox" style="width:auto;margin:0" ${odendi?'checked':''} onchange="window.girisOdendi['${g.musteriId}']=this.checked">
           Bugün Ödendi
         </label>
       </div>
@@ -1028,9 +1028,9 @@ function gunlukGirisKaydet(){
   let eklenen = 0;
   const gruplar = gunlukGirisGrupla();
   gruplar.forEach(g=>{
-    const odendi = girisOdendi[g.musteriId]===undefined ? false : girisOdendi[g.musteriId];
+    const odendi = window.girisOdendi[g.musteriId]===undefined ? false : window.girisOdendi[g.musteriId];
     g.satirlar.forEach(s=>{
-      const adet = girisAdetleri[s.id];
+      const adet = window.girisAdetleri[s.id];
       if(!adet || adet<=0) return;
       const t = DATA.ekmekTurleri.find(x=>x.id===s.turId);
       DATA.kayitlar.push({
@@ -1038,7 +1038,7 @@ function gunlukGirisKaydet(){
         adet, birimFiyat:t.fiyat, tarih:girisTarih, odendi
       });
       eklenen++;
-      girisAdetleri[s.id] = '';
+      window.girisAdetleri[s.id] = '';
     });
   });
   if(eklenen===0){ toast('Adet girilen satır yok.'); return; }
