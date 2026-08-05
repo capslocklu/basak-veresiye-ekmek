@@ -849,6 +849,15 @@ function renderRaporSonuclari(){
     if(!musteriBakiyeGorulebilir(raporSeciliMusteri)){ raporSeciliMusteri=null; renderRaporSonuclari(); return; }
     const satirlar = kayitlar.filter(k=>k.musteriId===raporSeciliMusteri).sort((a,b)=>a.tarih<b.tarih?-1:1);
     const toplam = satirlar.reduce((s,k)=>s+k.adet*k.birimFiyat,0);
+    const urunToplam = {};
+    satirlar.forEach(k=>{
+      if(!urunToplam[k.turId]) urunToplam[k.turId] = {adet:0, tutar:0};
+      urunToplam[k.turId].adet += k.adet;
+      urunToplam[k.turId].tutar += k.adet*k.birimFiyat;
+    });
+    const urunToplamRows = Object.entries(urunToplam)
+      .sort((a,b)=>b[1].tutar-a[1].tutar)
+      .map(([tid,v])=>`<tr><td>${turAdi(tid)}</td><td>${v.adet}</td><td>₺${fmt(v.tutar)}</td></tr>`).join('');
     const rows = satirlar.map(k=>`
       <tr><td>${k.tarih}</td><td>${turAdi(k.turId)}</td><td>${k.adet}</td><td>₺${fmt(k.birimFiyat)}</td><td>₺${fmt(k.adet*k.birimFiyat)}</td></tr>
     `).join('');
@@ -863,6 +872,10 @@ function renderRaporSonuclari(){
           <div style="font-size:11px;opacity:.9">TOPLAM</div>
           <div style="font-size:22px;font-weight:700">₺${fmt(toplam)}</div>
         </div>
+        <h3 style="font-size:13px;margin:0 0 8px">Ürün Bazlı Toplamlar</h3>
+        <table style="margin-bottom:16px"><thead><tr><th>Ürün</th><th>Adet</th><th>Tutar</th></tr></thead>
+        <tbody>${urunToplamRows}</tbody></table>
+        <h3 style="font-size:13px;margin:0 0 8px">Tüm İşlemler</h3>
         <table><thead><tr><th>Tarih</th><th>Ürün</th><th>Adet</th><th>B.Fiyat</th><th>Tutar</th></tr></thead>
         <tbody>${rows || `<tr><td colspan="5"><div class="empty">Bu dönemde kayıt yok.</div></td></tr>`}</tbody></table>
         <div style="text-align:right;font-weight:700;font-size:16px;margin-top:12px;padding-top:12px;border-top:1.5px solid var(--card-border)">
