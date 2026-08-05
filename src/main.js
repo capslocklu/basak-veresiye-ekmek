@@ -793,6 +793,8 @@ function raporOzelTarihGuncelle(){
   raporBitis = document.getElementById('raporBit').value;
   renderRaporSonuclari();
 }
+let raporSeciliMusteri = null;
+let raporSeciliUrun = null;
 function renderRaporlarTab(main){
   main.innerHTML = `
     <div class="card">
@@ -810,9 +812,30 @@ function renderRaporlarTab(main){
           <div><label>Bitiş</label><input id="raporBit" type="date" value="${raporBitis||todayISO()}" onchange="raporOzelTarihGuncelle()"></div>
         </div>
       ` : ''}
+      <p style="font-size:11.5px;color:var(--muted);margin:10px 0 0">
+        Tablodaki bir müşteri veya ürün satırına dokunursan, o tarih aralığındaki tüm işlemlerinin
+        ayrıntılı dökümünü (fatura kesmeye uygun) görürsün.
+      </p>
     </div>
     <div id="raporSonuclari"></div>
   `;
+  raporSeciliMusteri = null;
+  raporSeciliUrun = null;
+  renderRaporSonuclari();
+}
+function raporMusteriSec(mid){
+  raporSeciliMusteri = mid;
+  raporSeciliUrun = null;
+  renderRaporSonuclari();
+}
+function raporUrunSec(tid){
+  raporSeciliUrun = tid;
+  raporSeciliMusteri = null;
+  renderRaporSonuclari();
+}
+function raporDetayaKapat(){
+  raporSeciliMusteri = null;
+  raporSeciliUrun = null;
   renderRaporSonuclari();
 }
 function renderRaporSonuclari(){
@@ -820,12 +843,73 @@ function renderRaporSonuclari(){
   if(!kap) return;
   const {bas, bit} = raporTarihAraligiHesapla();
   const kayitlar = DATA.kayitlar.filter(k=>k.tarih>=bas && k.tarih<=bit);
+
+  // --- Tek müşteri detayı (fatura kesmeye uygun döküm) ---
+  if(raporSeciliMusteri){
+    if(!musteriBakiyeGorulebilir(raporSeciliMusteri)){ raporSeciliMusteri=null; renderRaporSonuclari(); return; }
+    const satirlar = kayitlar.filter(k=>k.musteriId===raporSeciliMusteri).sort((a,b)=>a.tarih<b.tarih?-1:1);
+    const toplam = satirlar.reduce((s,k)=>s+k.adet*k.birimFiyat,0);
+    const rows = satirlar.map(k=>`
+      <tr><td>${k.tarih}</td><td>${turAdi(k.turId)}</td><td>${k.adet}</td><td>₺${fmt(k.birimFiyat)}</td><td>₺${fmt(k.adet*k.birimFiyat)}</td></tr>
+    `).join('');
+    kap.innerHTML = `
+      <div class="card" id="yazdirAlani">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+          <h2 style="margin:0">${musteriAdi(raporSeciliMusteri)} — Dönem Dökümü</h2>
+          <button class="iconbtn" onclick="raporDetayaKapat()" title="Kapat">✕</button>
+        </div>
+        <p style="font-size:12px;color:var(--muted);margin:4px 0 12px">${bas} — ${bit}</p>
+        <div style="background:var(--wheat);color:#fff;border-radius:12px;padding:12px 16px;margin-bottom:14px;text-align:center">
+          <div style="font-size:11px;opacity:.9">TOPLAM</div>
+          <div style="font-size:22px;font-weight:700">₺${fmt(toplam)}</div>
+        </div>
+        <table><thead><tr><th>Tarih</th><th>Ürün</th><th>Adet</th><th>B.Fiyat</th><th>Tutar</th></tr></thead>
+        <tbody>${rows || `<tr><td colspan="5"><div class="empty">Bu dönemde kayıt yok.</div></td></tr>`}</tbody></table>
+        <div style="text-align:right;font-weight:700;font-size:16px;margin-top:12px;padding-top:12px;border-top:1.5px solid var(--card-border)">
+          Toplam: ₺${fmt(toplam)}
+        </div>
+      </div>
+      <button class="btn btn-primary btn-block" onclick="window.print()">🖨️ Yazdır / PDF Olarak Kaydet</button>
+    `;
+    return;
+  }
+
+  // --- Tek ürün detayı ---
+  if(raporSeciliUrun){
+    const satirlar = kayitlar.filter(k=>k.turId===raporSeciliUrun).sort((a,b)=>a.tarih<b.tarih?-1:1);
+    const toplamAdet = satirlar.reduce((s,k)=>s+k.adet,0);
+    const toplamTutar = satirlar.reduce((s,k)=>s+k.adet*k.birimFiyat,0);
+    const rows = satirlar.filter(k=>musteriBakiyeGorulebilir(k.musteriId)).map(k=>`
+      <tr><td>${k.tarih}</td><td>${musteriAdi(k.musteriId)}</td><td>${k.adet}</td><td>₺${fmt(k.birimFiyat)}</td><td>₺${fmt(k.adet*k.birimFiyat)}</td></tr>
+    `).join('');
+    kap.innerHTML = `
+      <div class="card" id="yazdirAlani">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+          <h2 style="margin:0">${turAdi(raporSeciliUrun)} — Dönem Dökümü</h2>
+          <button class="iconbtn" onclick="raporDetayaKapat()" title="Kapat">✕</button>
+        </div>
+        <p style="font-size:12px;color:var(--muted);margin:4px 0 12px">${bas} — ${bit}</p>
+        <div style="background:var(--wheat);color:#fff;border-radius:12px;padding:12px 16px;margin-bottom:14px;text-align:center">
+          <div style="font-size:11px;opacity:.9">TOPLAM</div>
+          <div style="font-size:22px;font-weight:700">${toplamAdet} adet — ₺${fmt(toplamTutar)}</div>
+        </div>
+        <table><thead><tr><th>Tarih</th><th>Müşteri</th><th>Adet</th><th>B.Fiyat</th><th>Tutar</th></tr></thead>
+        <tbody>${rows || `<tr><td colspan="5"><div class="empty">Bu dönemde kayıt yok.</div></td></tr>`}</tbody></table>
+        <div style="text-align:right;font-weight:700;font-size:16px;margin-top:12px;padding-top:12px;border-top:1.5px solid var(--card-border)">
+          Toplam: ${toplamAdet} adet — ₺${fmt(toplamTutar)}
+        </div>
+      </div>
+      <button class="btn btn-primary btn-block" onclick="window.print()">🖨️ Yazdır / PDF Olarak Kaydet</button>
+    `;
+    return;
+  }
+
+  // --- Genel özet (varsayılan görünüm) ---
   const odemeler = DATA.odemeler.filter(o=>o.tarih>=bas && o.tarih<=bit);
   const toplamCiro = kayitlar.reduce((s,k)=>s+k.adet*k.birimFiyat,0);
   const toplamAdet = kayitlar.reduce((s,k)=>s+k.adet,0);
   const toplamTahsilat = odemeler.reduce((s,o)=>s+o.tutar,0);
 
-  // Müşteri bazlı
   const musteriToplam = {};
   kayitlar.forEach(k=>{
     if(!musteriToplam[k.musteriId]) musteriToplam[k.musteriId] = {adet:0, tutar:0};
@@ -835,9 +919,8 @@ function renderRaporSonuclari(){
   const musteriRows = Object.entries(musteriToplam)
     .filter(([mid])=>musteriBakiyeGorulebilir(mid))
     .sort((a,b)=>b[1].tutar-a[1].tutar)
-    .map(([mid,v])=>`<tr><td>${musteriAdi(mid)}</td><td>${v.adet}</td><td>₺${fmt(v.tutar)}</td></tr>`).join('');
+    .map(([mid,v])=>`<tr style="cursor:pointer" onclick="raporMusteriSec('${mid}')"><td>${musteriAdi(mid)}</td><td>${v.adet}</td><td>₺${fmt(v.tutar)}</td></tr>`).join('');
 
-  // Ürün bazlı
   const turToplam = {};
   kayitlar.forEach(k=>{
     if(!turToplam[k.turId]) turToplam[k.turId] = {adet:0, tutar:0};
@@ -846,7 +929,7 @@ function renderRaporSonuclari(){
   });
   const turRows = Object.entries(turToplam)
     .sort((a,b)=>b[1].tutar-a[1].tutar)
-    .map(([tid,v])=>`<tr><td>${turAdi(tid)}</td><td>${v.adet}</td><td>₺${fmt(v.tutar)}</td></tr>`).join('');
+    .map(([tid,v])=>`<tr style="cursor:pointer" onclick="raporUrunSec('${tid}')"><td>${turAdi(tid)}</td><td>${v.adet}</td><td>₺${fmt(v.tutar)}</td></tr>`).join('');
 
   kap.innerHTML = `
     <div class="statRow">
@@ -855,12 +938,12 @@ function renderRaporSonuclari(){
       <div class="stat"><div class="n">₺${fmt(toplamTahsilat)}</div><div class="l">Tahsilat</div></div>
     </div>
     <div class="card">
-      <h2>Müşteri Bazlı</h2>
+      <h2>Müşteri Bazlı <span style="font-size:11px;color:var(--muted);font-weight:400">(detay için dokun)</span></h2>
       <table><thead><tr><th>Müşteri</th><th>Adet</th><th>Tutar</th></tr></thead>
       <tbody>${musteriRows || `<tr><td colspan="3"><div class="empty">Bu dönemde kayıt yok.</div></td></tr>`}</tbody></table>
     </div>
     <div class="card">
-      <h2>Ürün Bazlı</h2>
+      <h2>Ürün Bazlı <span style="font-size:11px;color:var(--muted);font-weight:400">(detay için dokun)</span></h2>
       <table><thead><tr><th>Ürün</th><th>Adet</th><th>Tutar</th></tr></thead>
       <tbody>${turRows || `<tr><td colspan="3"><div class="empty">Bu dönemde kayıt yok.</div></td></tr>`}</tbody></table>
     </div>
@@ -1185,9 +1268,12 @@ window.musteriToplamOdenen = musteriToplamOdenen;
 window.odemeAlModal = odemeAlModal;
 window.odemeGecmisiModal = odemeGecmisiModal;
 window.persist = persist;
+window.raporDetayaKapat = raporDetayaKapat;
 window.raporDonemDegisti = raporDonemDegisti;
+window.raporMusteriSec = raporMusteriSec;
 window.raporOzelTarihGuncelle = raporOzelTarihGuncelle;
 window.raporTarihAraligiHesapla = raporTarihAraligiHesapla;
+window.raporUrunSec = raporUrunSec;
 window.renderBorclarTab = renderBorclarTab;
 window.renderGunlukGirisTab = renderGunlukGirisTab;
 window.renderKayitTablosu = renderKayitTablosu;
