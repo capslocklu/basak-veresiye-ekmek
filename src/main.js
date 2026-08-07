@@ -366,15 +366,16 @@ function renderOzetTab(main){
       <button class="btn btn-ghost btn-block" style="margin-top:8px" onclick="acGenelOdemeModal()">💳 Ödeme Al</button>
     </div>
     <div class="card">
-      <h2>En Çok Borçlu 5 Müşteri</h2>
-      ${renderMusteriMiniListe([...borcluMusteriler].sort((a,b)=>musteriBakiye(b.id)-musteriBakiye(a.id)).slice(0,5))}
+      <h2>En Çok Borçlu 10 Müşteri ${isPatron()?'<span style="font-size:11px;color:var(--muted);font-weight:400">(detay için dokun)</span>':''}</h2>
+      ${renderMusteriMiniListe([...borcluMusteriler].sort((a,b)=>musteriBakiye(b.id)-musteriBakiye(a.id)).slice(0,10))}
     </div>
   `;
 }
 function renderMusteriMiniListe(musteriler){
   if(!musteriler.length) return `<div class="empty">Şu an borçlu müşteri yok 🎉</div>`;
+  const tiklanabilir = isPatron();
   const rows = musteriler.map(m=>`
-    <tr>
+    <tr ${tiklanabilir?`style="cursor:pointer" onclick="editMusteriModal('${m.id}')"`:''}>
       <td>${m.ad}</td>
       <td style="text-align:right"><span class="pill pill-debt">₺${fmt(musteriBakiye(m.id))}</span></td>
     </tr>`).join('');
