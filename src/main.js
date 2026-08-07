@@ -143,9 +143,11 @@ function closeModal(){ document.getElementById('modalBg').classList.remove('show
 function musteriAdi(id){ const m = DATA.musteriler.find(x=>x.id===id); return m?m.ad:'—'; }
 function turAdi(id){ const t = DATA.ekmekTurleri.find(x=>x.id===id); return t?t.ad:'—'; }
 function musteriBakiye(musteriId){
+  const m = DATA.musteriler.find(x=>x.id===musteriId);
+  const acilis = (m && Number(m.acilisBakiyesi)) || 0;
   const borc = DATA.kayitlar.filter(k=>k.musteriId===musteriId && !k.odendi).reduce((s,k)=>s+k.adet*k.birimFiyat,0);
   const odeme = DATA.odemeler.filter(o=>o.musteriId===musteriId).reduce((s,o)=>s+o.tutar,0);
-  return borc - odeme;
+  return acilis + borc - odeme;
 }
 function musteriEtiketToId(){
   const map = {};
@@ -424,7 +426,7 @@ function kaydetYeniKayit(){
   DATA.kayitlar.push({
     id:'k_'+Date.now(), musteriId, turId, adet, birimFiyat:fiyat, tarih, odendi
   });
-  persist(); closeModal(); toast('Kaydedildi ✓'); renderTab(activeTab);
+  persist(); musteriPortalSenkronEt(musteriId); closeModal(); toast('Kaydedildi ✓'); renderTab(activeTab);
 }
 
 /* ---------------- KAYITLAR (geçmiş liste) ---------------- */
@@ -485,17 +487,21 @@ function saveEditKayit(kayitId){
   k.birimFiyat = Number(document.getElementById('ekFiyat').value);
   k.tarih = document.getElementById('ekTarih').value;
   k.odendi = document.getElementById('ekOdendi').checked;
-  persist(); closeModal(); toast('Güncellendi ✓'); renderTab(activeTab);
+  persist(); musteriPortalSenkronEt(k.musteriId); closeModal(); toast('Güncellendi ✓'); renderTab(activeTab);
 }
 function silKayit(kayitId){
   if(!confirm('Bu kayıt silinsin mi?')) return;
+  const k = DATA.kayitlar.find(x=>x.id===kayitId);
+  const musteriId = k ? k.musteriId : null;
   DATA.kayitlar = DATA.kayitlar.filter(k=>k.id!==kayitId);
-  persist(); toast('Silindi ✓'); renderTab(activeTab);
+  persist(); if(musteriId) musteriPortalSenkronEt(musteriId); toast('Silindi ✓'); renderTab(activeTab);
 }
 
 /* ---------------- BORÇLAR / VERESİYE ---------------- */
 function musteriToplamBorc(musteriId){
-  return DATA.kayitlar.filter(k=>k.musteriId===musteriId && !k.odendi).reduce((s,k)=>s+k.adet*k.birimFiyat,0);
+  const m = DATA.musteriler.find(x=>x.id===musteriId);
+  const acilis = (m && Number(m.acilisBakiyesi)) || 0;
+  return acilis + DATA.kayitlar.filter(k=>k.musteriId===musteriId && !k.odendi).reduce((s,k)=>s+k.adet*k.birimFiyat,0);
 }
 function musteriToplamOdenen(musteriId){
   return DATA.odemeler.filter(o=>o.musteriId===musteriId).reduce((s,o)=>s+o.tutar,0);
@@ -575,7 +581,7 @@ function kaydetGenelOdeme(){
   if(!musteriBakiyeGorulebilir(musteriId)){ toast('Bu müşteri için yetkin yok'); return; }
   if(!tutar || tutar<=0){ toast('Geçerli bir tutar gir'); return; }
   DATA.odemeler.push({id:'o_'+Date.now(), musteriId, tutar, tarih:todayISO(), not});
-  persist(); closeModal(); toast('Tahsilat kaydedildi ✓'); renderTab(activeTab);
+  persist(); musteriPortalSenkronEt(musteriId); closeModal(); toast('Tahsilat kaydedildi ✓'); renderTab(activeTab);
 }
 function odemeAlModal(musteriId){
   if(!musteriBakiyeGorulebilir(musteriId)){ toast('Bu müşteri için yetkin yok'); return; }
@@ -596,7 +602,7 @@ function kaydetOdeme(musteriId){
   const not = document.getElementById('oNot').value.trim();
   if(!tutar || tutar<=0){ toast('Geçerli bir tutar gir'); return; }
   DATA.odemeler.push({id:'o_'+Date.now(), musteriId, tutar, tarih:todayISO(), not});
-  persist(); closeModal(); toast('Tahsilat kaydedildi ✓'); renderTab('borclar');
+  persist(); musteriPortalSenkronEt(musteriId); closeModal(); toast('Tahsilat kaydedildi ✓'); renderTab('borclar');
 }
 
 /* ---------------- MÜŞTERİLER ---------------- */
@@ -675,32 +681,63 @@ function editMusteriModal(id){
     <input id="mTel" value="${m.telefon||''}" placeholder="0532 123 45 67">
     <label>Geçmiş Bakiye (Bu Sisteme Geçmeden Önceki Devreden Borç, opsiyonel)</label>
     <input id="mAcilis" type="number" step="0.01" value="${m.acilisBakiyesi||''}" placeholder="0 — eski defterden aktarılan borç varsa buraya gir">
-    <button class="btn btn-primary btn-block" onclick="saveMusteri('${id||''}')">Kaydet</button>
+    ${id ? `
+    <h3 style="margin-top:16px">Müşteri Portalı</h3>
+    <p style="font-size:11.5px;color:var(--muted);margin:0 0 10px">
+      Müşteri, kendisine özel linke girip aşağıda belirleyeceğin şifreyi yazarak sadece kendi
+      bakiyesini ve aldığı ekmek adetlerini görebilir. Şirketinin diğer verilerine asla erişemez.
+    </p>
+    <label>Portal Şifresi</label>
+    <input id="mPortalSifre" value="${m.portalSifre||''}" placeholder="örn: 1234 (müşteriye söyleyeceğin şifre)">
+    ${m.erisimKodu ? `
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:rgba(0,0,0,0.03);padding:10px;border-radius:8px;margin-top:8px">
+        <input id="portalLinkGoster" readonly value="${window.location.origin + window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/')+1)}portal.html?kod=${m.erisimKodu}" style="flex:1;min-width:180px;font-size:11.5px;margin-bottom:0">
+        <button class="btn btn-ghost" onclick="portalLinkKopyala()">📋 Kopyala</button>
+      </div>
+    ` : `<p style="font-size:11.5px;color:var(--crust);margin-top:8px">Kaydet'e bastığında link otomatik oluşacak.</p>`}
+    ` : `<p style="font-size:11.5px;color:var(--muted);margin-top:12px">Portal linki, müşteriyi kaydettikten sonra oluşturulabilir.</p>`}
+    <button class="btn btn-primary btn-block" style="margin-top:14px" onclick="saveMusteri('${id||''}')">Kaydet</button>
   `);
   setTimeout(()=>document.getElementById('mAd').focus(), 50);
+}
+function portalLinkKopyala(){
+  const el = document.getElementById('portalLinkGoster');
+  el.select();
+  navigator.clipboard ? navigator.clipboard.writeText(el.value).then(()=>toast('Kopyalandı ✓')) : document.execCommand('copy');
+}
+function rastgeleErisimKodu(){
+  const alfabe = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  let kod = '';
+  for(let i=0;i<20;i++) kod += alfabe[Math.floor(Math.random()*alfabe.length)];
+  return kod;
+}
+function musteriPortalSenkronEt(musteriId){
+  if(DEMO_MODE || !db) return;
+  const m = DATA.musteriler.find(x=>x.id===musteriId);
+  if(!m || !m.erisimKodu) return;
+  const sonKayitlar = DATA.kayitlar.filter(k=>k.musteriId===musteriId).sort((a,b)=>a.tarih<b.tarih?1:-1).slice(0,25)
+    .map(k=>({tarih:k.tarih, urun:turAdi(k.turId), adet:k.adet, tutar:k.adet*k.birimFiyat, odendi:k.odendi}));
+  db.collection('musteriPortal').doc(m.erisimKodu).set({
+    ad: m.ad, bakiye: musteriBakiye(musteriId), sifre: m.portalSifre || '',
+    sonKayitlar, guncellenme: new Date().toISOString()
+  }).catch(err=>console.error('Portal senkron hatası', err));
 }
 function saveMusteri(id){
   const ad = document.getElementById('mAd').value.trim();
   const telefon = document.getElementById('mTel').value.trim();
   const acilisBakiyesi = Number(document.getElementById('mAcilis').value) || 0;
+  const portalSifre = id ? document.getElementById('mPortalSifre').value.trim() : '';
   if(!ad){ toast('Müşteri adı gerekli'); return; }
+  let musteriId = id;
   if(id){
     const m = DATA.musteriler.find(x=>x.id===id);
-    Object.assign(m, {ad, telefon, acilisBakiyesi});
+    if(!m.erisimKodu) m.erisimKodu = rastgeleErisimKodu();
+    Object.assign(m, {ad, telefon, acilisBakiyesi, portalSifre});
   } else {
-    const yeniId = 'm_'+Date.now();
-    DATA.musteriler.push({id:yeniId, ad, telefon, acilisBakiyesi});
-    // Açılış bakiyesi girildiyse, bunu ilk gün için "veresiye" bir kayıt olarak ekleyelim ki
-    // bakiye hesaplarında ve raporlarda görünsün.
-    if(acilisBakiyesi){
-      if(!DATA.ekmekTurleri.length){
-        DATA.ekmekTurleri.push({id:'e_devir', ad:'Devreden Bakiye', fiyat:acilisBakiyesi});
-      }
-      const turId = DATA.ekmekTurleri[0].id;
-      DATA.kayitlar.push({id:'k_devir_'+Date.now(), musteriId:yeniId, turId, adet:1, birimFiyat:acilisBakiyesi, tarih:todayISO(), odendi:false, devir:true});
-    }
+    musteriId = 'm_'+Date.now();
+    DATA.musteriler.push({id:musteriId, ad, telefon, acilisBakiyesi, portalSifre:'', erisimKodu:rastgeleErisimKodu()});
   }
-  persist(); closeModal(); toast('Kaydedildi ✓'); renderTab(activeTab);
+  persist(); musteriPortalSenkronEt(musteriId); closeModal(); toast('Kaydedildi ✓'); renderTab(activeTab);
 }
 function silMusteri(id){
   if(!confirm('Bu müşteriyi silmek istediğine emin misin? Geçmiş kayıtları da silinir.')) return;
@@ -1139,6 +1176,7 @@ function gunlukGirisKaydet(){
   });
   if(eklenen===0){ toast('Adet girilen satır yok.'); return; }
   persist();
+  gruplar.forEach(g=>musteriPortalSenkronEt(g.musteriId));
   toast(`${eklenen} satır kaydedildi ✓`);
   renderTab('gunlukgiris');
 }
@@ -1275,18 +1313,21 @@ window.musteriAramaSec = musteriAramaSec;
 window.musteriBakiye = musteriBakiye;
 window.musteriBakiyeGorulebilir = musteriBakiyeGorulebilir;
 window.musteriEtiketToId = musteriEtiketToId;
+window.musteriPortalSenkronEt = musteriPortalSenkronEt;
 window.musteriSatirlariniOlustur = musteriSatirlariniOlustur;
 window.musteriToplamBorc = musteriToplamBorc;
 window.musteriToplamOdenen = musteriToplamOdenen;
 window.odemeAlModal = odemeAlModal;
 window.odemeGecmisiModal = odemeGecmisiModal;
 window.persist = persist;
+window.portalLinkKopyala = portalLinkKopyala;
 window.raporDetayaKapat = raporDetayaKapat;
 window.raporDonemDegisti = raporDonemDegisti;
 window.raporMusteriSec = raporMusteriSec;
 window.raporOzelTarihGuncelle = raporOzelTarihGuncelle;
 window.raporTarihAraligiHesapla = raporTarihAraligiHesapla;
 window.raporUrunSec = raporUrunSec;
+window.rastgeleErisimKodu = rastgeleErisimKodu;
 window.renderBorclarTab = renderBorclarTab;
 window.renderGunlukGirisTab = renderGunlukGirisTab;
 window.renderKayitTablosu = renderKayitTablosu;
