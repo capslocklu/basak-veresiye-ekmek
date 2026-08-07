@@ -325,7 +325,7 @@ const TABS = [
   {id:'ozet', label:'📊 Özet'},
   {id:'gunlukgiris', label:'📝 Günlük Giriş'},
   {id:'sablon', label:'🗂️ Giriş Şablonu'},
-  {id:'kayitlar', label:'📒 Kayıtlar'},
+  {id:'kayitlar', label:'📒 Kayıtlar', patronOnly:true},
   {id:'borclar', label:'💳 Borçlar'},
   {id:'musteriler', label:'👥 Müşteriler'},
   {id:'turler', label:'🍞 Ekmek Türleri'},
@@ -338,7 +338,7 @@ function buildTabs(){
   nav.innerHTML = gorunecekler.map(t=>`<button data-tab="${t.id}" onclick="renderTab('${t.id}')">${t.label}</button>`).join('');
 }
 function renderTab(id){
-  if(id==='personel' && !isPatron()) id = 'ozet'; // güvenlik: personel bu sekmeye giremesin
+  if((id==='personel' || id==='kayitlar') && !isPatron()) id = 'ozet'; // güvenlik: personel bu sekmelere giremesin
   activeTab = id;
   document.querySelectorAll('#tabsNav button').forEach(b=>b.classList.toggle('active', b.dataset.tab===id));
   const main = document.getElementById('mainContent');
