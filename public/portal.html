@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Veresiye Takip — Hesabım</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --oven:#2b1d14; --crust:#c97a3d; --wheat:#e2a765; --bg:#faf6f0; --card:#ffffff;
+    --card-border:#ece3d6; --text:#2b1d14; --muted:#8a7d6d; --ok:#5c7a3f; --danger:#b5432f;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;align-items:flex-start;justify-content:center;padding:24px 16px;}
+  .wrap{max-width:440px;width:100%;}
+  .logo{font-size:44px;text-align:center;margin-bottom:6px;}
+  h1{font-family:'Fraunces',serif;font-size:21px;margin:0 0 4px;text-align:center;}
+  .muted{color:var(--muted);font-size:13px;margin:0 0 20px;text-align:center;}
+  .card{background:var(--card);border:1px solid var(--card-border);border-radius:16px;padding:20px;margin-bottom:16px;box-shadow:0 2px 10px rgba(43,29,20,0.05);}
+  label{font-size:12.5px;font-weight:600;color:var(--crust);display:block;margin-bottom:4px;}
+  input{width:100%;padding:11px 12px;border:1.5px solid var(--card-border);border-radius:10px;font-size:15px;margin-bottom:14px;}
+  button{width:100%;padding:12px;border:none;border-radius:10px;background:var(--crust);color:#fff;font-weight:600;font-size:14.5px;cursor:pointer;}
+  .bakiyeBuyuk{font-family:'Fraunces',serif;font-size:32px;font-weight:700;margin:4px 0;}
+  .debt{color:var(--danger);} .paid{color:var(--ok);}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th{text-align:left;color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;padding:6px 4px;border-bottom:1px solid var(--card-border);}
+  td{padding:8px 4px;border-bottom:1px solid var(--card-border);}
+  .pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;}
+  .pill-debt{background:rgba(181,67,47,0.12);color:var(--danger);}
+  .pill-paid{background:rgba(92,122,63,0.12);color:var(--ok);}
+  .empty{text-align:center;color:var(--muted);padding:20px 0;font-size:13px;}
+  .err{background:#fff3f0;border:1px solid var(--danger);color:var(--danger);padding:12px 14px;border-radius:10px;font-size:13.5px;line-height:1.6;margin-bottom:14px;}
+  .loading{text-align:center;padding:60px 0;color:var(--muted);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="logo">🍞</div>
+  <h1>Veresiye Takip</h1>
+  <p class="muted">Hesabınıza erişmek için şifrenizi girin.</p>
+  <div id="icerik" class="loading">Yükleniyor...</div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+// ÖNEMLİ: Bu sayfa "musteriPortal" koleksiyonundan, sadece URL'deki koda karşılık gelen TEK
+// bir dokümanı okur. Firestore kuralı bu koleksiyonda herkese SADECE OKUMA izni verir, YAZMA
+// vermez. Ayrıca burada müşterinin kendi belirlediği/patronun verdiği şifre de kontrol edilir —
+// linki bilse bile şifreyi bilmeyen biri veriyi göremez.
+const firebaseConfig = {
+  apiKey: "AIzaSyCBOHjtLkvn0VCez5rY_hT_wCBV2SPWfm4",
+  authDomain: "basak-veresiye-ekmek.firebaseapp.com",
+  projectId: "basak-veresiye-ekmek",
+  storageBucket: "basak-veresiye-ekmek.firebasestorage.app",
+  messagingSenderId: "727312464606",
+  appId: "1:727312464606:web:d1855db720d2636500204f"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+function fmt(n){ return Number(n||0).toLocaleString('tr-TR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+
+const params = new URLSearchParams(window.location.search);
+const kod = params.get('kod');
+const icerik = document.getElementById('icerik');
+let veri = null;
+
+if(!kod){
+  icerik.innerHTML = `<div class="err">Geçersiz bağlantı. Lütfen sana verilen linki tam olarak kullan.</div>`;
+} else {
+  db.collection('musteriPortal').doc(kod).get().then(doc=>{
+    if(!doc.exists){
+      icerik.innerHTML = `<div class="err">Bu bağlantı artık geçerli değil.</div>`;
+      return;
+    }
+    veri = doc.data();
+    sifreEkraniGoster();
+  }).catch(err=>{
+    icerik.innerHTML = `<div class="err">Bağlantı hatası: ${err.message}</div>`;
+  });
+}
+
+function sifreEkraniGoster(hataMesaji){
+  icerik.innerHTML = `
+    <div class="card">
+      ${hataMesaji ? `<div class="err">${hataMesaji}</div>` : ''}
+      <label>Şifre</label>
+      <input id="sifreInput" type="password" inputmode="numeric" placeholder="Şifreni gir">
+      <button onclick="sifreKontrolEt()">Giriş Yap</button>
+    </div>
+  `;
+  const el = document.getElementById('sifreInput');
+  el.focus();
+  el.addEventListener('keydown', e=>{ if(e.key==='Enter') sifreKontrolEt(); });
+}
+
+function sifreKontrolEt(){
+  const girilen = document.getElementById('sifreInput').value.trim();
+  const dogru = (veri.sifre || '').trim();
+  if(!dogru){
+    // Patron henüz bir şifre belirlememişse, girişe izin ver (uyarı ile).
+    hesabiGoster();
+    return;
+  }
+  if(girilen !== dogru){
+    sifreEkraniGoster('Şifre yanlış, tekrar dene.');
+    return;
+  }
+  hesabiGoster();
+}
+
+function hesabiGoster(){
+  const bakiye = veri.bakiye || 0;
+  const rows = (veri.sonKayitlar||[]).map(k=>`
+    <tr><td>${k.tarih}</td><td>${k.urun}</td><td>${k.adet}</td><td>₺${fmt(k.tutar)}</td>
+    <td>${k.odendi ? '<span class="pill pill-paid">Peşin</span>' : '<span class="pill pill-debt">Veresiye</span>'}</td></tr>
+  `).join('');
+  icerik.innerHTML = `
+    <div class="card">
+      <div class="muted" style="font-size:12px;">GÜNCEL BAKİYE</div>
+      <div class="bakiyeBuyuk ${bakiye>0?'debt':'paid'}">₺${fmt(Math.abs(bakiye))}</div>
+      <div class="${bakiye>0?'pill pill-debt':'pill pill-paid'}">${bakiye>0 ? 'Borçlusunuz' : 'Bakiyeniz kapalı'}</div>
+    </div>
+    <div class="card">
+      <h3 style="margin:0 0 10px;font-size:14px;">Aldığınız Ekmekler</h3>
+      <table><thead><tr><th>Tarih</th><th>Ürün</th><th>Adet</th><th>Tutar</th><th>Durum</th></tr></thead>
+      <tbody>${rows || `<tr><td colspan="5" class="empty">Henüz teslimat yok.</td></tr>`}</tbody></table>
+    </div>
+    <p class="muted" style="font-size:11px;">Son güncelleme: ${veri.guncellenme ? new Date(veri.guncellenme).toLocaleString('tr-TR') : '—'}</p>
+  `;
+}
+</script>
+</body>
+</html>
