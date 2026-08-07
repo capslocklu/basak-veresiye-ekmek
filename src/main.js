@@ -701,7 +701,10 @@ function editMusteriModal(id){
     </p>
     ${DATA.ekmekTurleri.map(t=>`
       <label style="font-weight:400;color:var(--text)">${t.ad} <span style="color:var(--muted);font-size:11px">(standart ₺${fmt(t.fiyat)})</span></label>
-      <input class="ozelFiyatInput" data-tur="${t.id}" type="number" step="0.01" value="${(m.ozelFiyatlar&&m.ozelFiyatlar[t.id]!=null)?m.ozelFiyatlar[t.id]:''}" placeholder="boş = standart fiyat">
+      <div style="display:flex;gap:8px;align-items:flex-start">
+        <input class="ozelFiyatInput" data-tur="${t.id}" type="number" step="0.01" value="${(m.ozelFiyatlar&&m.ozelFiyatlar[t.id]!=null)?m.ozelFiyatlar[t.id]:''}" placeholder="boş = standart fiyat" style="flex:1">
+        ${id ? `<button type="button" class="btn btn-ghost" style="white-space:nowrap;padding:11px 12px;font-size:12px" onclick="gecmisFiyatDuzelt('${id}','${t.id}')" title="Bu fiyatı bu müşterinin bu üründeki TÜM geçmiş kayıtlarına da uygula">🔧 Geçmişe Uygula</button>` : ''}
+      </div>
     `).join('')}
     ` : ''}
     ${id ? `
@@ -764,6 +767,25 @@ function musteriPortalSenkronEt(musteriId){
     ad: m.ad, bakiye: musteriBakiye(musteriId), acilisBakiyesi: Number(m.acilisBakiyesi)||0,
     sifre: m.portalSifre || '', sonKayitlar, guncellenme: new Date().toISOString()
   }).catch(err=>console.error('Portal senkron hatası', err));
+}
+// Bir müşterinin bir üründeki TÜM geçmiş kayıtlarının fiyatını, o an kutuda yazan (ya da boşsa
+// standart) fiyata göre toplu olarak günceller. Özel fiyatı da aynı anda kaydeder ki modal
+// kapandığında kaybolmasın.
+function gecmisFiyatDuzelt(musteriId, turId){
+  const input = document.querySelector(`.ozelFiyatInput[data-tur="${turId}"]`);
+  const deger = input.value.trim();
+  const t = DATA.ekmekTurleri.find(x=>x.id===turId);
+  const yeniFiyat = deger !== '' ? Number(deger) : t.fiyat;
+  const etkilenen = DATA.kayitlar.filter(k=>k.musteriId===musteriId && k.turId===turId);
+  if(!etkilenen.length){ toast('Bu üründe geçmiş kaydı yok'); return; }
+  if(!confirm(`${musteriAdi(musteriId)} — ${t.ad}: geçmişteki ${etkilenen.length} kayıt ₺${fmt(yeniFiyat)} olarak güncellensin mi? Bu işlem geri alınamaz.`)) return;
+  etkilenen.forEach(k=>{ k.birimFiyat = yeniFiyat; });
+  // Özel fiyatı da bu arada kaydedelim ki kutuyu boş bırakmadıysa modal kapanınca kaybolmasın.
+  const m = DATA.musteriler.find(x=>x.id===musteriId);
+  if(!m.ozelFiyatlar) m.ozelFiyatlar = {};
+  if(deger !== '') m.ozelFiyatlar[turId] = yeniFiyat; else delete m.ozelFiyatlar[turId];
+  persist(); musteriPortalSenkronEt(musteriId);
+  toast(`${etkilenen.length} kayıt güncellendi ✓`);
 }
 function saveMusteri(id){
   const ad = document.getElementById('mAd').value.trim();
@@ -1344,6 +1366,7 @@ window.enterApp = enterApp;
 window.fabAction = fabAction;
 window.firestoreVerisiniYukle = firestoreVerisiniYukle;
 window.fmt = fmt;
+window.gecmisFiyatDuzelt = gecmisFiyatDuzelt;
 window.gorunurBakiyeMusteriIdleri = gorunurBakiyeMusteriIdleri;
 window.gunlukGirisGrupla = gunlukGirisGrupla;
 window.gunlukGirisKaydet = gunlukGirisKaydet;
