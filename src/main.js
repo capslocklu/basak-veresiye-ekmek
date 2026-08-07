@@ -629,6 +629,7 @@ function musteriSatirlariniOlustur(){
       <td>${gorebilir ? '₺'+fmt(musteriBakiye(m.id)) : '<span style="color:var(--muted)">🔒 Gizli</span>'}</td>
       <td class="rowActions">
         ${isPatron() ? `<button class="iconbtn" onclick="editMusteriModal('${m.id}')">✏️</button>
+        <button class="iconbtn" onclick="whatsappGonderListeden('${m.id}')" title="WhatsApp'tan gönder">📱</button>
         <button class="iconbtn" onclick="silMusteri('${m.id}')">🗑️</button>` : ''}
       </td>
     </tr>`;
@@ -736,18 +737,57 @@ function portalLinkKopyala(){
 }
 // Portal linkini VE şifresini hazır bir mesaj olarak WhatsApp'a gönderir. Müşterinin telefonu
 // kayıtlıysa direkt onun sohbetini açar; yoksa WhatsApp'ın kendi kişi seçme ekranını açar.
-function portalWhatsappGonder(musteriId){
+// Gerçek WhatsApp açma işini yapan ortak fonksiyon — hem müşteri modalındaki butondan hem
+// Müşteriler listesindeki 📱 ikonundan çağrılır.
+function whatsappMesajiAc(musteriId, sifre){
   const m = DATA.musteriler.find(x=>x.id===musteriId);
-  if(!m || !m.erisimKodu){ toast('Önce portal linkini oluştur'); return; }
-  const sifreEl = document.getElementById('mPortalSifre');
-  const sifre = sifreEl ? sifreEl.value.trim() : (m.portalSifre||'');
-  if(!sifre){ toast("Önce bir portal şifresi belirle ve Kaydet'e bas"); return; }
   const link = window.location.origin + window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/')+1) + 'portal.html?kod=' + m.erisimKodu;
   const hitapAdi = m.adSoyad || m.ad;
   const mesaj = `Merhaba ${hitapAdi}, ekmek hesabınızı görebileceğiniz link:\n${link}\n\nŞifreniz: ${sifre}`;
   const telefonTemiz = (m.telefon||'').replace(/[^0-9]/g,'');
   const numaraliLink = telefonTemiz ? `https://wa.me/${telefonTemiz.startsWith('90')?telefonTemiz:'90'+telefonTemiz.replace(/^0/,'')}` : 'https://wa.me/';
   window.open(`${numaraliLink}?text=${encodeURIComponent(mesaj)}`, '_blank');
+}
+// Müşteri düzenleme modalındaki "WhatsApp'tan Gönder" butonu — kutudaki güncel şifreyi kullanır.
+function portalWhatsappGonder(musteriId){
+  const m = DATA.musteriler.find(x=>x.id===musteriId);
+  if(!m || !m.erisimKodu){ toast('Önce portal linkini oluştur'); return; }
+  const sifreEl = document.getElementById('mPortalSifre');
+  const sifre = sifreEl ? sifreEl.value.trim() : (m.portalSifre||'');
+  if(!sifre){ toast("Önce bir portal şifresi belirle ve Kaydet'e bas"); return; }
+  whatsappMesajiAc(musteriId, sifre);
+}
+// Müşteriler listesindeki 📱 ikonu — modalı hiç açmadan direkt gönderir. Şifre henüz
+// belirlenmemişse önce onu isteyen küçük bir pencere açar.
+function whatsappGonderListeden(musteriId){
+  const m = DATA.musteriler.find(x=>x.id===musteriId);
+  if(!m) return;
+  if(!m.erisimKodu){ m.erisimKodu = rastgeleErisimKodu(); persist(); }
+  if(m.portalSifre){
+    whatsappMesajiAc(musteriId, m.portalSifre);
+    return;
+  }
+  showModal(`
+    <button class="modalClose" onclick="closeModal()">✕</button>
+    <h3>${m.ad} — Portal Şifresi Gerekli</h3>
+    <p style="font-size:12.5px;color:var(--muted);margin:0 0 10px">
+      Bu müşteri için henüz bir portal şifresi belirlemedin. Şifreyi belirleyip aynı anda
+      WhatsApp'tan gönderebilirsin.
+    </p>
+    <label>Portal Şifresi</label>
+    <input id="hizliSifre" placeholder="örn: 1234">
+    <button class="btn btn-primary btn-block" onclick="hizliSifreKaydetVeGonder('${musteriId}')">Kaydet ve WhatsApp'ı Aç</button>
+  `);
+  setTimeout(()=>document.getElementById('hizliSifre').focus(), 50);
+}
+function hizliSifreKaydetVeGonder(musteriId){
+  const sifre = document.getElementById('hizliSifre').value.trim();
+  if(!sifre){ toast('Bir şifre gir'); return; }
+  const m = DATA.musteriler.find(x=>x.id===musteriId);
+  m.portalSifre = sifre;
+  persist(); musteriPortalSenkronEt(musteriId);
+  closeModal();
+  whatsappMesajiAc(musteriId, sifre);
 }
 function rastgeleErisimKodu(){
   const alfabe = 'abcdefghijklmnopqrstuvwxyz0123456789';
@@ -1374,6 +1414,7 @@ window.gecmisFiyatDuzelt = gecmisFiyatDuzelt;
 window.gorunurBakiyeMusteriIdleri = gorunurBakiyeMusteriIdleri;
 window.gunlukGirisGrupla = gunlukGirisGrupla;
 window.gunlukGirisKaydet = gunlukGirisKaydet;
+window.hizliSifreKaydetVeGonder = hizliSifreKaydetVeGonder;
 window.isPatron = isPatron;
 window.kaydetGenelOdeme = kaydetGenelOdeme;
 window.kaydetOdeme = kaydetOdeme;
@@ -1438,3 +1479,5 @@ window.todayISO = todayISO;
 window.toggleSablonAktif = toggleSablonAktif;
 window.topluMusteriEkleModal = topluMusteriEkleModal;
 window.turAdi = turAdi;
+window.whatsappGonderListeden = whatsappGonderListeden;
+window.whatsappMesajiAc = whatsappMesajiAc;
