@@ -732,7 +732,10 @@ function musteriPortalSenkronEt(musteriId){
   if(!m || !m.erisimKodu) return;
   // Aylık raporlama görebilmesi için son 25 değil, son 300 kaydı gönderiyoruz (küçük bir işletme
   // için birkaç yıllık geçmişi kolayca kapsar).
-  const sonKayitlar = DATA.kayitlar.filter(k=>k.musteriId===musteriId).sort((a,b)=>a.tarih<b.tarih?1:-1).slice(0,300)
+  // 300 kayıt sınırı bazı müşterilerde ayın başını kesiyordu (yoğun müşterilerde birkaç ayda
+  // 300'ü geçebiliyor). 3000'e çıkardık — bu, Firestore'un tek belge için izin verdiği 1MB
+  // sınırının çok altında kalıyor (her kayıt yaklaşık 100 bayt, 3000 kayıt ~300KB eder).
+  const sonKayitlar = DATA.kayitlar.filter(k=>k.musteriId===musteriId).sort((a,b)=>a.tarih<b.tarih?1:-1).slice(0,3000)
     .map(k=>({tarih:k.tarih, urun:turAdi(k.turId), adet:k.adet, tutar:k.adet*k.birimFiyat, odendi:k.odendi}));
   db.collection('musteriPortal').doc(m.erisimKodu).set({
     ad: m.ad, bakiye: musteriBakiye(musteriId), acilisBakiyesi: Number(m.acilisBakiyesi)||0,
