@@ -149,6 +149,15 @@ function musteriBakiye(musteriId){
   const odeme = DATA.odemeler.filter(o=>o.musteriId===musteriId).reduce((s,o)=>s+o.tutar,0);
   return acilis + borc - odeme;
 }
+// Bir müşteri için bir ekmek türünün geçerli fiyatını döner — müşterinin o ürün için özel bir
+// fiyatı varsa onu, yoksa ürünün standart (genel) fiyatını kullanır.
+function birimFiyatHesapla(musteriId, turId){
+  const m = DATA.musteriler.find(x=>x.id===musteriId);
+  const t = DATA.ekmekTurleri.find(x=>x.id===turId);
+  if(!t) return 0;
+  if(m && m.ozelFiyatlar && m.ozelFiyatlar[turId]!=null && m.ozelFiyatlar[turId]!=='') return Number(m.ozelFiyatlar[turId]);
+  return t.fiyat;
+}
 function musteriEtiketToId(){
   const map = {};
   const sayac = {};
@@ -162,17 +171,17 @@ function musteriEtiketToId(){
 // Kendi tasarımım müşteri arama/seç kutusu: boşken hiçbir şey göstermez, yazdıkça
 // SADECE eşleşen müşterileri filtreleyip küçük bir liste olarak gösterir — tarayıcının
 // yerleşik <datalist>'i (boşken tüm listeyi birden açan) yerine bunu kullanıyoruz.
-function musteriAramaHtml(inputId, hiddenId, dropdownId, placeholder){
+function musteriAramaHtml(inputId, hiddenId, dropdownId, placeholder, callbackFn){
   return `
     <div style="position:relative">
       <input id="${inputId}" autocomplete="off" placeholder="${placeholder||'Müşteri adı yazmaya başla...'}"
-        oninput="musteriAramaFiltrele('${inputId}','${dropdownId}','${hiddenId}')"
-        onfocus="musteriAramaFiltrele('${inputId}','${dropdownId}','${hiddenId}')">
+        oninput="musteriAramaFiltrele('${inputId}','${dropdownId}','${hiddenId}','${callbackFn||''}')"
+        onfocus="musteriAramaFiltrele('${inputId}','${dropdownId}','${hiddenId}','${callbackFn||''}')">
       <input type="hidden" id="${hiddenId}" value="">
       <div id="${dropdownId}" style="display:none;position:absolute;top:calc(100% - 10px);left:0;right:0;background:#fff;border:1.5px solid var(--card-border);border-radius:10px;max-height:220px;overflow-y:auto;z-index:20;box-shadow:0 6px 18px rgba(0,0,0,0.15);"></div>
     </div>`;
 }
-function musteriAramaFiltrele(inputId, dropdownId, hiddenId){
+function musteriAramaFiltrele(inputId, dropdownId, hiddenId, callbackFn){
   const q = document.getElementById(inputId).value.trim().toLowerCase();
   const dropdown = document.getElementById(dropdownId);
   if(!q){ dropdown.style.display='none'; dropdown.innerHTML=''; return; }
@@ -184,14 +193,15 @@ function musteriAramaFiltrele(inputId, dropdownId, hiddenId){
   }
   dropdown.innerHTML = eslesenler.map(m=>`
     <div style="padding:10px 12px;font-size:14px;border-bottom:1px solid var(--card-border);cursor:pointer"
-      onmousedown="musteriAramaSec('${inputId}','${dropdownId}','${hiddenId}','${m.id}')">${m.ad}</div>
+      onmousedown="musteriAramaSec('${inputId}','${dropdownId}','${hiddenId}','${m.id}','${callbackFn||''}')">${m.ad}</div>
   `).join('');
   dropdown.style.display='block';
 }
-function musteriAramaSec(inputId, dropdownId, hiddenId, musteriId){
+function musteriAramaSec(inputId, dropdownId, hiddenId, musteriId, callbackFn){
   document.getElementById(inputId).value = musteriAdi(musteriId);
   document.getElementById(hiddenId).value = musteriId;
   document.getElementById(dropdownId).style.display = 'none';
+  if(callbackFn && window[callbackFn]) window[callbackFn]();
 }
 function isPatron(){ return !currentUser || currentUser.role !== 'personel'; }
 // personel için hangi müşterilerin bakiye/borç bilgisini görebileceğini döner; patron için null
@@ -391,7 +401,7 @@ function acYeniKayitModal(){
     <button class="modalClose" onclick="closeModal()">✕</button>
     <h3>Yeni Veresiye Kaydı</h3>
     <label>Müşteri</label>
-    ${musteriAramaHtml('kMusteriArama','kMusteriId','kMusteriDropdown')}
+    ${musteriAramaHtml('kMusteriArama','kMusteriId','kMusteriDropdown', null, 'kayitFiyatGuncelle')}
     <div style="height:12px"></div>
     <label>Ekmek Türü</label>
     <select id="kTur" onchange="kayitFiyatGuncelle()">${turOpts}</select>
@@ -411,9 +421,9 @@ function acYeniKayitModal(){
   setTimeout(()=>document.getElementById('kMusteriArama').focus(), 50);
 }
 function kayitFiyatGuncelle(){
-  const sel = document.getElementById('kTur');
-  const fiyat = sel.options[sel.selectedIndex].dataset.fiyat;
-  document.getElementById('kFiyat').value = fiyat;
+  const turId = document.getElementById('kTur').value;
+  const musteriId = document.getElementById('kMusteriId').value;
+  document.getElementById('kFiyat').value = musteriId ? birimFiyatHesapla(musteriId, turId) : (DATA.ekmekTurleri.find(t=>t.id===turId)||{}).fiyat || '';
 }
 function kaydetYeniKayit(){
   const musteriId = document.getElementById('kMusteriId').value;
@@ -682,6 +692,18 @@ function editMusteriModal(id){
     <input id="mTel" value="${m.telefon||''}" placeholder="0532 123 45 67">
     <label>Geçmiş Bakiye (Bu Sisteme Geçmeden Önceki Devreden Borç, opsiyonel)</label>
     <input id="mAcilis" type="number" step="0.01" value="${m.acilisBakiyesi||''}" placeholder="0 — eski defterden aktarılan borç varsa buraya gir">
+    ${DATA.ekmekTurleri.length ? `
+    <h3 style="margin-top:16px">Özel Fiyatlar (opsiyonel)</h3>
+    <p style="font-size:11.5px;color:var(--muted);margin:0 0 10px">
+      Bu müşteriye bazı ürünlerde farklı (özel/indirimli) fiyat çekiyorsan buradan belirle — boş
+      bıraktığın ürünler standart fiyattan devam eder. Günlük Giriş'te ve Yeni Kayıt'ta bu müşteri
+      için otomatik uygulanır.
+    </p>
+    ${DATA.ekmekTurleri.map(t=>`
+      <label style="font-weight:400;color:var(--text)">${t.ad} <span style="color:var(--muted);font-size:11px">(standart ₺${fmt(t.fiyat)})</span></label>
+      <input class="ozelFiyatInput" data-tur="${t.id}" type="number" step="0.01" value="${(m.ozelFiyatlar&&m.ozelFiyatlar[t.id]!=null)?m.ozelFiyatlar[t.id]:''}" placeholder="boş = standart fiyat">
+    `).join('')}
+    ` : ''}
     ${id ? `
     <h3 style="margin-top:16px">Müşteri Portalı</h3>
     <p style="font-size:11.5px;color:var(--muted);margin:0 0 10px">
@@ -748,15 +770,20 @@ function saveMusteri(id){
   const telefon = document.getElementById('mTel').value.trim();
   const acilisBakiyesi = Number(document.getElementById('mAcilis').value) || 0;
   const portalSifre = id ? document.getElementById('mPortalSifre').value.trim() : '';
+  const ozelFiyatlar = {};
+  document.querySelectorAll('.ozelFiyatInput').forEach(el=>{
+    const deger = el.value.trim();
+    if(deger !== '') ozelFiyatlar[el.dataset.tur] = Number(deger);
+  });
   if(!ad){ toast('Müşteri adı gerekli'); return; }
   let musteriId = id;
   if(id){
     const m = DATA.musteriler.find(x=>x.id===id);
     if(!m.erisimKodu) m.erisimKodu = rastgeleErisimKodu();
-    Object.assign(m, {ad, telefon, acilisBakiyesi, portalSifre});
+    Object.assign(m, {ad, telefon, acilisBakiyesi, portalSifre, ozelFiyatlar});
   } else {
     musteriId = 'm_'+Date.now();
-    DATA.musteriler.push({id:musteriId, ad, telefon, acilisBakiyesi, portalSifre:'', erisimKodu:rastgeleErisimKodu()});
+    DATA.musteriler.push({id:musteriId, ad, telefon, acilisBakiyesi, portalSifre:'', erisimKodu:rastgeleErisimKodu(), ozelFiyatlar});
   }
   persist(); musteriPortalSenkronEt(musteriId); closeModal(); toast('Kaydedildi ✓'); renderTab(activeTab);
 }
@@ -1189,7 +1216,7 @@ function gunlukGirisKaydet(){
       const t = DATA.ekmekTurleri.find(x=>x.id===s.turId);
       DATA.kayitlar.push({
         id:'k_'+Date.now()+'_'+s.id, musteriId:g.musteriId, turId:s.turId,
-        adet, birimFiyat:t.fiyat, tarih:girisTarih, odendi
+        adet, birimFiyat:birimFiyatHesapla(g.musteriId, s.turId), tarih:girisTarih, odendi
       });
       eklenen++;
       window.girisAdetleri[s.id] = '';
@@ -1299,6 +1326,7 @@ document.getElementById('modalBg').addEventListener('click', e=>{
 window.acGenelOdemeModal = acGenelOdemeModal;
 window.acYeniKayitModal = acYeniKayitModal;
 window.baglantiRozetiGuncelle = baglantiRozetiGuncelle;
+window.birimFiyatHesapla = birimFiyatHesapla;
 window.buildTabs = buildTabs;
 window.canliSenkronuBaslat = canliSenkronuBaslat;
 window.closeModal = closeModal;
