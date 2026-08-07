@@ -682,12 +682,14 @@ function kaydetTopluMusteri(){
   persist(); closeModal(); toast(`${eklenen} müşteri eklendi ✓`); renderTab('musteriler');
 }
 function editMusteriModal(id){
-  const m = id ? DATA.musteriler.find(x=>x.id===id) : {ad:'', telefon:''};
+  const m = id ? DATA.musteriler.find(x=>x.id===id) : {ad:'', telefon:'', adSoyad:''};
   showModal(`
     <button class="modalClose" onclick="closeModal()">✕</button>
     <h3>${id?'Müşteriyi Düzenle':'Yeni Müşteri'}</h3>
-    <label>Ad</label>
-    <input id="mAd" value="${m.ad||''}" placeholder="Müşteri adı">
+    <label>İşletme Adı</label>
+    <input id="mAd" value="${m.ad||''}" placeholder="örn: 6N Market">
+    <label>Ad Soyad (opsiyonel — WhatsApp mesajında hitap için kullanılır)</label>
+    <input id="mAdSoyad" value="${m.adSoyad||''}" placeholder="örn: Ahmet Yılmaz — boş bırakırsan işletme adı kullanılır">
     <label>Telefon (opsiyonel)</label>
     <input id="mTel" value="${m.telefon||''}" placeholder="0532 123 45 67">
     <label>Geçmiş Bakiye (Bu Sisteme Geçmeden Önceki Devreden Borç, opsiyonel)</label>
@@ -741,7 +743,8 @@ function portalWhatsappGonder(musteriId){
   const sifre = sifreEl ? sifreEl.value.trim() : (m.portalSifre||'');
   if(!sifre){ toast("Önce bir portal şifresi belirle ve Kaydet'e bas"); return; }
   const link = window.location.origin + window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/')+1) + 'portal.html?kod=' + m.erisimKodu;
-  const mesaj = `Merhaba ${m.ad}, ekmek hesabınızı görebileceğiniz link:\n${link}\n\nŞifreniz: ${sifre}`;
+  const hitapAdi = m.adSoyad || m.ad;
+  const mesaj = `Merhaba ${hitapAdi}, ekmek hesabınızı görebileceğiniz link:\n${link}\n\nŞifreniz: ${sifre}`;
   const telefonTemiz = (m.telefon||'').replace(/[^0-9]/g,'');
   const numaraliLink = telefonTemiz ? `https://wa.me/${telefonTemiz.startsWith('90')?telefonTemiz:'90'+telefonTemiz.replace(/^0/,'')}` : 'https://wa.me/';
   window.open(`${numaraliLink}?text=${encodeURIComponent(mesaj)}`, '_blank');
@@ -789,6 +792,7 @@ function gecmisFiyatDuzelt(musteriId, turId){
 }
 function saveMusteri(id){
   const ad = document.getElementById('mAd').value.trim();
+  const adSoyad = document.getElementById('mAdSoyad').value.trim();
   const telefon = document.getElementById('mTel').value.trim();
   const acilisBakiyesi = Number(document.getElementById('mAcilis').value) || 0;
   const portalSifre = id ? document.getElementById('mPortalSifre').value.trim() : '';
@@ -802,10 +806,10 @@ function saveMusteri(id){
   if(id){
     const m = DATA.musteriler.find(x=>x.id===id);
     if(!m.erisimKodu) m.erisimKodu = rastgeleErisimKodu();
-    Object.assign(m, {ad, telefon, acilisBakiyesi, portalSifre, ozelFiyatlar});
+    Object.assign(m, {ad, adSoyad, telefon, acilisBakiyesi, portalSifre, ozelFiyatlar});
   } else {
     musteriId = 'm_'+Date.now();
-    DATA.musteriler.push({id:musteriId, ad, telefon, acilisBakiyesi, portalSifre:'', erisimKodu:rastgeleErisimKodu(), ozelFiyatlar});
+    DATA.musteriler.push({id:musteriId, ad, adSoyad, telefon, acilisBakiyesi, portalSifre:'', erisimKodu:rastgeleErisimKodu(), ozelFiyatlar});
   }
   persist(); musteriPortalSenkronEt(musteriId); closeModal(); toast('Kaydedildi ✓'); renderTab(activeTab);
 }
