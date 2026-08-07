@@ -112,23 +112,80 @@ function sifreKontrolEt(){
 
 function hesabiGoster(){
   const bakiye = veri.bakiye || 0;
-  const rows = (veri.sonKayitlar||[]).map(k=>`
-    <tr><td>${k.tarih}</td><td>${k.urun}</td><td>${k.adet}</td><td>₺${fmt(k.tutar)}</td>
-    <td>${k.odendi ? '<span class="pill pill-paid">Peşin</span>' : '<span class="pill pill-debt">Veresiye</span>'}</td></tr>
-  `).join('');
+  const kayitlar = veri.sonKayitlar || [];
+
+  // Kayıtları "YYYY-AA" bazında grupla, her ay için toplam adet/tutar hesapla.
+  const aylik = {};
+  kayitlar.forEach(k=>{
+    const ay = (k.tarih||'').slice(0,7); // "2026-08"
+    if(!aylik[ay]) aylik[ay] = {adet:0, tutar:0, satirlar:[]};
+    aylik[ay].adet += k.adet;
+    aylik[ay].tutar += k.tutar;
+    aylik[ay].satirlar.push(k);
+  });
+  const ayAdlari = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
+  const ayListesi = Object.keys(aylik).sort().reverse();
+
+  const aylikRows = ayListesi.map(ay=>{
+    const [yil, ayNo] = ay.split('-');
+    const etiket = `${ayAdlari[Number(ayNo)-1]} ${yil}`;
+    const v = aylik[ay];
+    return `<tr style="cursor:pointer" onclick="ayDetayGoster('${ay}')">
+      <td>${etiket}</td><td>${v.adet} adet</td><td>₺${fmt(v.tutar)}</td>
+    </tr>`;
+  }).join('');
+
+  window._aylik = aylik;
+  window._ayAdlari = ayAdlari;
+
   icerik.innerHTML = `
     <div class="card">
       <div class="muted" style="font-size:12px;">GÜNCEL BAKİYE</div>
       <div class="bakiyeBuyuk ${bakiye>0?'debt':'paid'}">₺${fmt(Math.abs(bakiye))}</div>
       <div class="${bakiye>0?'pill pill-debt':'pill pill-paid'}">${bakiye>0 ? 'Borçlusunuz' : 'Bakiyeniz kapalı'}</div>
+      ${veri.acilisBakiyesi ? `
+        <div style="margin-top:12px;padding-top:12px;border-top:1px dashed var(--card-border);font-size:12.5px;color:var(--muted)">
+          Bu, ${(veri.acilisBakiyesi>0 ? 'sistem öncesinden devreden ₺'+fmt(veri.acilisBakiyesi)+' borcunuzu' : 'sistem öncesinden devreden ₺'+fmt(-veri.acilisBakiyesi)+' alacağınızı')} da içerir.
+        </div>
+      ` : ''}
     </div>
     <div class="card">
-      <h3 style="margin:0 0 10px;font-size:14px;">Aldığınız Ekmekler</h3>
-      <table><thead><tr><th>Tarih</th><th>Ürün</th><th>Adet</th><th>Tutar</th><th>Durum</th></tr></thead>
-      <tbody>${rows || `<tr><td colspan="5" class="empty">Henüz teslimat yok.</td></tr>`}</tbody></table>
+      <h3 style="margin:0 0 10px;font-size:14px;">Aylık Özet <span style="font-size:11px;color:var(--muted);font-weight:400">(detay için dokun)</span></h3>
+      <table><thead><tr><th>Ay</th><th>Adet</th><th>Tutar</th></tr></thead>
+      <tbody>${aylikRows || `<tr><td colspan="3" class="empty">Henüz teslimat yok.</td></tr>`}</tbody></table>
+    </div>
+    <div id="ayDetayKart"></div>
+    <div class="card">
+      <h3 style="margin:0 0 10px;font-size:14px;">Tüm İşlemler</h3>
+      ${tumIslemlerTablosu(kayitlar)}
     </div>
     <p class="muted" style="font-size:11px;">Son güncelleme: ${veri.guncellenme ? new Date(veri.guncellenme).toLocaleString('tr-TR') : '—'}</p>
   `;
+}
+function tumIslemlerTablosu(kayitlar){
+  const rows = kayitlar.map(k=>`
+    <tr><td>${k.tarih}</td><td>${k.urun}</td><td>${k.adet}</td><td>₺${fmt(k.tutar)}</td>
+    <td>${k.odendi ? '<span class="pill pill-paid">Peşin</span>' : '<span class="pill pill-debt">Veresiye</span>'}</td></tr>
+  `).join('');
+  return `<table><thead><tr><th>Tarih</th><th>Ürün</th><th>Adet</th><th>Tutar</th><th>Durum</th></tr></thead>
+  <tbody>${rows || `<tr><td colspan="5" class="empty">Henüz teslimat yok.</td></tr>`}</tbody></table>`;
+}
+function ayDetayGoster(ay){
+  const v = window._aylik[ay];
+  const [yil, ayNo] = ay.split('-');
+  const etiket = `${window._ayAdlari[Number(ayNo)-1]} ${yil}`;
+  const kart = document.getElementById('ayDetayKart');
+  kart.innerHTML = `
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+        <h3 style="margin:0;font-size:14px;">${etiket} Detayı</h3>
+        <button style="width:auto;padding:4px 10px;font-size:12px" onclick="document.getElementById('ayDetayKart').innerHTML=''">Kapat ✕</button>
+      </div>
+      <p class="muted" style="font-size:12px;margin:6px 0 10px">${v.adet} adet — ₺${fmt(v.tutar)}</p>
+      ${tumIslemlerTablosu(v.satirlar)}
+    </div>
+  `;
+  kart.scrollIntoView({behavior:'smooth', block:'start'});
 }
 </script>
 </body>
