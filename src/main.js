@@ -694,6 +694,7 @@ function editMusteriModal(id){
         <input id="portalLinkGoster" readonly value="${window.location.origin + window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/')+1)}portal.html?kod=${m.erisimKodu}" style="flex:1;min-width:180px;font-size:11.5px;margin-bottom:0">
         <button class="btn btn-ghost" onclick="portalLinkKopyala()">📋 Kopyala</button>
       </div>
+      <button class="btn btn-block" style="margin-top:8px;background:#25D366;color:#fff" onclick="portalWhatsappGonder('${id}')">📱 WhatsApp'tan Gönder</button>
     ` : `<p style="font-size:11.5px;color:var(--crust);margin-top:8px">Kaydet'e bastığında link otomatik oluşacak.</p>`}
     ` : `<p style="font-size:11.5px;color:var(--muted);margin-top:12px">Portal linki, müşteriyi kaydettikten sonra oluşturulabilir.</p>`}
     <button class="btn btn-primary btn-block" style="margin-top:14px" onclick="saveMusteri('${id||''}')">Kaydet</button>
@@ -704,6 +705,20 @@ function portalLinkKopyala(){
   const el = document.getElementById('portalLinkGoster');
   el.select();
   navigator.clipboard ? navigator.clipboard.writeText(el.value).then(()=>toast('Kopyalandı ✓')) : document.execCommand('copy');
+}
+// Portal linkini VE şifresini hazır bir mesaj olarak WhatsApp'a gönderir. Müşterinin telefonu
+// kayıtlıysa direkt onun sohbetini açar; yoksa WhatsApp'ın kendi kişi seçme ekranını açar.
+function portalWhatsappGonder(musteriId){
+  const m = DATA.musteriler.find(x=>x.id===musteriId);
+  if(!m || !m.erisimKodu){ toast('Önce portal linkini oluştur'); return; }
+  const sifreEl = document.getElementById('mPortalSifre');
+  const sifre = sifreEl ? sifreEl.value.trim() : (m.portalSifre||'');
+  if(!sifre){ toast("Önce bir portal şifresi belirle ve Kaydet'e bas"); return; }
+  const link = window.location.origin + window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/')+1) + 'portal.html?kod=' + m.erisimKodu;
+  const mesaj = `Merhaba ${m.ad}, ekmek hesabınızı görebileceğiniz link:\n${link}\n\nŞifreniz: ${sifre}`;
+  const telefonTemiz = (m.telefon||'').replace(/[^0-9]/g,'');
+  const numaraliLink = telefonTemiz ? `https://wa.me/${telefonTemiz.startsWith('90')?telefonTemiz:'90'+telefonTemiz.replace(/^0/,'')}` : 'https://wa.me/';
+  window.open(`${numaraliLink}?text=${encodeURIComponent(mesaj)}`, '_blank');
 }
 function rastgeleErisimKodu(){
   const alfabe = 'abcdefghijklmnopqrstuvwxyz0123456789';
@@ -1323,6 +1338,7 @@ window.odemeAlModal = odemeAlModal;
 window.odemeGecmisiModal = odemeGecmisiModal;
 window.persist = persist;
 window.portalLinkKopyala = portalLinkKopyala;
+window.portalWhatsappGonder = portalWhatsappGonder;
 window.raporDetayaKapat = raporDetayaKapat;
 window.raporDonemDegisti = raporDonemDegisti;
 window.raporMusteriSec = raporMusteriSec;
