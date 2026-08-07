@@ -715,11 +715,13 @@ function musteriPortalSenkronEt(musteriId){
   if(DEMO_MODE || !db) return;
   const m = DATA.musteriler.find(x=>x.id===musteriId);
   if(!m || !m.erisimKodu) return;
-  const sonKayitlar = DATA.kayitlar.filter(k=>k.musteriId===musteriId).sort((a,b)=>a.tarih<b.tarih?1:-1).slice(0,25)
+  // Aylık raporlama görebilmesi için son 25 değil, son 300 kaydı gönderiyoruz (küçük bir işletme
+  // için birkaç yıllık geçmişi kolayca kapsar).
+  const sonKayitlar = DATA.kayitlar.filter(k=>k.musteriId===musteriId).sort((a,b)=>a.tarih<b.tarih?1:-1).slice(0,300)
     .map(k=>({tarih:k.tarih, urun:turAdi(k.turId), adet:k.adet, tutar:k.adet*k.birimFiyat, odendi:k.odendi}));
   db.collection('musteriPortal').doc(m.erisimKodu).set({
-    ad: m.ad, bakiye: musteriBakiye(musteriId), sifre: m.portalSifre || '',
-    sonKayitlar, guncellenme: new Date().toISOString()
+    ad: m.ad, bakiye: musteriBakiye(musteriId), acilisBakiyesi: Number(m.acilisBakiyesi)||0,
+    sifre: m.portalSifre || '', sonKayitlar, guncellenme: new Date().toISOString()
   }).catch(err=>console.error('Portal senkron hatası', err));
 }
 function saveMusteri(id){
