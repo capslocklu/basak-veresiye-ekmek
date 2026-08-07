@@ -114,14 +114,27 @@ function hesabiGoster(){
   const bakiye = veri.bakiye || 0;
   const kayitlar = veri.sonKayitlar || [];
 
-  // Kayıtları "YYYY-AA" bazında grupla, her ay için toplam adet/tutar hesapla.
+  // Tüm zamanlar için ürün bazlı toplam (kaç adet hangi ekmekten alınmış)
+  const urunToplam = {};
+  kayitlar.forEach(k=>{
+    if(!urunToplam[k.urun]) urunToplam[k.urun] = {adet:0, tutar:0};
+    urunToplam[k.urun].adet += k.adet;
+    urunToplam[k.urun].tutar += k.tutar;
+  });
+  const urunRows = Object.entries(urunToplam).sort((a,b)=>b[1].adet-a[1].adet)
+    .map(([urun,v])=>`<tr><td>${urun}</td><td>${v.adet} adet</td><td>₺${fmt(v.tutar)}</td></tr>`).join('');
+
+  // Kayıtları "YYYY-AA" bazında grupla, her ay için ürün bazlı toplam hesapla.
   const aylik = {};
   kayitlar.forEach(k=>{
     const ay = (k.tarih||'').slice(0,7); // "2026-08"
-    if(!aylik[ay]) aylik[ay] = {adet:0, tutar:0, satirlar:[]};
+    if(!aylik[ay]) aylik[ay] = {adet:0, tutar:0, satirlar:[], urunler:{}};
     aylik[ay].adet += k.adet;
     aylik[ay].tutar += k.tutar;
     aylik[ay].satirlar.push(k);
+    if(!aylik[ay].urunler[k.urun]) aylik[ay].urunler[k.urun] = {adet:0, tutar:0};
+    aylik[ay].urunler[k.urun].adet += k.adet;
+    aylik[ay].urunler[k.urun].tutar += k.tutar;
   });
   const ayAdlari = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
   const ayListesi = Object.keys(aylik).sort().reverse();
@@ -130,8 +143,10 @@ function hesabiGoster(){
     const [yil, ayNo] = ay.split('-');
     const etiket = `${ayAdlari[Number(ayNo)-1]} ${yil}`;
     const v = aylik[ay];
+    const urunOzet = Object.entries(v.urunler).map(([urun,uv])=>`${urun}: ${uv.adet}`).join(', ');
     return `<tr style="cursor:pointer" onclick="ayDetayGoster('${ay}')">
-      <td>${etiket}</td><td>${v.adet} adet</td><td>₺${fmt(v.tutar)}</td>
+      <td>${etiket}<br><span style="font-size:11px;color:var(--muted)">${urunOzet}</span></td>
+      <td>₺${fmt(v.tutar)}</td>
     </tr>`;
   }).join('');
 
@@ -150,9 +165,14 @@ function hesabiGoster(){
       ` : ''}
     </div>
     <div class="card">
+      <h3 style="margin:0 0 10px;font-size:14px;">Ürün Bazlı Toplam (Tüm Zamanlar)</h3>
+      <table><thead><tr><th>Ürün</th><th>Adet</th><th>Tutar</th></tr></thead>
+      <tbody>${urunRows || `<tr><td colspan="3" class="empty">Henüz teslimat yok.</td></tr>`}</tbody></table>
+    </div>
+    <div class="card">
       <h3 style="margin:0 0 10px;font-size:14px;">Aylık Özet <span style="font-size:11px;color:var(--muted);font-weight:400">(detay için dokun)</span></h3>
-      <table><thead><tr><th>Ay</th><th>Adet</th><th>Tutar</th></tr></thead>
-      <tbody>${aylikRows || `<tr><td colspan="3" class="empty">Henüz teslimat yok.</td></tr>`}</tbody></table>
+      <table><thead><tr><th>Ay / Ürünler</th><th>Tutar</th></tr></thead>
+      <tbody>${aylikRows || `<tr><td colspan="2" class="empty">Henüz teslimat yok.</td></tr>`}</tbody></table>
     </div>
     <div id="ayDetayKart"></div>
     <div class="card">
@@ -174,6 +194,8 @@ function ayDetayGoster(ay){
   const v = window._aylik[ay];
   const [yil, ayNo] = ay.split('-');
   const etiket = `${window._ayAdlari[Number(ayNo)-1]} ${yil}`;
+  const urunRows = Object.entries(v.urunler).sort((a,b)=>b[1].adet-a[1].adet)
+    .map(([urun,uv])=>`<tr><td>${urun}</td><td>${uv.adet} adet</td><td>₺${fmt(uv.tutar)}</td></tr>`).join('');
   const kart = document.getElementById('ayDetayKart');
   kart.innerHTML = `
     <div class="card">
@@ -181,7 +203,11 @@ function ayDetayGoster(ay){
         <h3 style="margin:0;font-size:14px;">${etiket} Detayı</h3>
         <button style="width:auto;padding:4px 10px;font-size:12px" onclick="document.getElementById('ayDetayKart').innerHTML=''">Kapat ✕</button>
       </div>
-      <p class="muted" style="font-size:12px;margin:6px 0 10px">${v.adet} adet — ₺${fmt(v.tutar)}</p>
+      <p class="muted" style="font-size:12px;margin:6px 0 10px">Toplam: ₺${fmt(v.tutar)}</p>
+      <h4 style="font-size:12.5px;margin:0 0 6px">Ürün Bazlı</h4>
+      <table style="margin-bottom:14px"><thead><tr><th>Ürün</th><th>Adet</th><th>Tutar</th></tr></thead>
+      <tbody>${urunRows}</tbody></table>
+      <h4 style="font-size:12.5px;margin:0 0 6px">Tüm İşlemler</h4>
       ${tumIslemlerTablosu(v.satirlar)}
     </div>
   `;
