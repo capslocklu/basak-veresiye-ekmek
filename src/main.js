@@ -743,7 +743,7 @@ function whatsappMesajiAc(musteriId, sifre){
   const m = DATA.musteriler.find(x=>x.id===musteriId);
   const link = window.location.origin + window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/')+1) + 'portal.html?kod=' + m.erisimKodu;
   const hitapAdi = m.adSoyad || m.ad;
-  const mesaj = `Merhaba ${hitapAdi}, ekmek hesabınızı görebileceğiniz link:\n${link}\n\nŞifreniz: ${sifre}`;
+  const mesaj = `Merhaba ${hitapAdi}, ekmek hesabınızı görebileceğiniz link:\n${link}\n\nŞifreniz: ${sifre}\n\nBu bir otomatik uygulama mesajıdır.`;
   const telefonTemiz = (m.telefon||'').replace(/[^0-9]/g,'');
   const numaraliLink = telefonTemiz ? `https://wa.me/${telefonTemiz.startsWith('90')?telefonTemiz:'90'+telefonTemiz.replace(/^0/,'')}` : 'https://wa.me/';
   window.open(`${numaraliLink}?text=${encodeURIComponent(mesaj)}`, '_blank');
