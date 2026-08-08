@@ -691,6 +691,12 @@ function editMusteriModal(id){
     <input id="mAd" value="${m.ad||''}" placeholder="örn: 6N Market">
     <label>Ad Soyad (opsiyonel — WhatsApp mesajında hitap için kullanılır)</label>
     <input id="mAdSoyad" value="${m.adSoyad||''}" placeholder="örn: Ahmet Yılmaz — boş bırakırsan işletme adı kullanılır">
+    <label>Cinsiyet (opsiyonel — WhatsApp'ta "Bey/Hanım" hitabı için)</label>
+    <select id="mCinsiyet">
+      <option value="" ${!m.cinsiyet?'selected':''}>Belirtilmemiş (Firma olarak hitap edilir)</option>
+      <option value="erkek" ${m.cinsiyet==='erkek'?'selected':''}>Erkek — "... Bey" diye hitap edilir</option>
+      <option value="kadin" ${m.cinsiyet==='kadin'?'selected':''}>Kadın — "... Hanım" diye hitap edilir</option>
+    </select>
     <label>Telefon (opsiyonel)</label>
     <input id="mTel" value="${m.telefon||''}" placeholder="0532 123 45 67">
     <label>Geçmiş Bakiye (Bu Sisteme Geçmeden Önceki Devreden Borç, opsiyonel)</label>
@@ -742,7 +748,11 @@ function portalLinkKopyala(){
 function whatsappMesajiAc(musteriId, sifre){
   const m = DATA.musteriler.find(x=>x.id===musteriId);
   const link = window.location.origin + window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/')+1) + 'portal.html?kod=' + m.erisimKodu;
-  const hitapAdi = m.adSoyad || m.ad;
+  // Ad Soyad girilmiş VE cinsiyet belirtilmişse "Ahmet Yılmaz Bey/Hanım" diye hitap edilir;
+  // aksi halde (firma ya da cinsiyet belirtilmemişse) sade işletme adı kullanılır.
+  let hitapAdi = m.adSoyad || m.ad;
+  if(m.adSoyad && m.cinsiyet==='erkek') hitapAdi = `${m.adSoyad} Bey`;
+  else if(m.adSoyad && m.cinsiyet==='kadin') hitapAdi = `${m.adSoyad} Hanım`;
   const mesaj = `Merhaba ${hitapAdi}, ekmek hesabınızı görebileceğiniz link:\n${link}\n\nŞifreniz: ${sifre}\n\nBu bir otomatik uygulama mesajıdır.`;
   const telefonTemiz = (m.telefon||'').replace(/[^0-9]/g,'');
   const numaraliLink = telefonTemiz ? `https://wa.me/${telefonTemiz.startsWith('90')?telefonTemiz:'90'+telefonTemiz.replace(/^0/,'')}` : 'https://wa.me/';
@@ -833,6 +843,7 @@ function gecmisFiyatDuzelt(musteriId, turId){
 function saveMusteri(id){
   const ad = document.getElementById('mAd').value.trim();
   const adSoyad = document.getElementById('mAdSoyad').value.trim();
+  const cinsiyet = document.getElementById('mCinsiyet').value;
   const telefon = document.getElementById('mTel').value.trim();
   const acilisBakiyesi = Number(document.getElementById('mAcilis').value) || 0;
   const portalSifre = id ? document.getElementById('mPortalSifre').value.trim() : '';
@@ -846,10 +857,10 @@ function saveMusteri(id){
   if(id){
     const m = DATA.musteriler.find(x=>x.id===id);
     if(!m.erisimKodu) m.erisimKodu = rastgeleErisimKodu();
-    Object.assign(m, {ad, adSoyad, telefon, acilisBakiyesi, portalSifre, ozelFiyatlar});
+    Object.assign(m, {ad, adSoyad, cinsiyet, telefon, acilisBakiyesi, portalSifre, ozelFiyatlar});
   } else {
     musteriId = 'm_'+Date.now();
-    DATA.musteriler.push({id:musteriId, ad, adSoyad, telefon, acilisBakiyesi, portalSifre:'', erisimKodu:rastgeleErisimKodu(), ozelFiyatlar});
+    DATA.musteriler.push({id:musteriId, ad, adSoyad, cinsiyet, telefon, acilisBakiyesi, portalSifre:'', erisimKodu:rastgeleErisimKodu(), ozelFiyatlar});
   }
   persist(); musteriPortalSenkronEt(musteriId); closeModal(); toast('Kaydedildi ✓'); renderTab(activeTab);
 }
