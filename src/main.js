@@ -652,6 +652,7 @@ function renderMusterilerTab(main){
       <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
         <button class="btn btn-primary" onclick="editMusteriModal(null)">+ Yeni Müşteri</button>
         <button class="btn btn-ghost" onclick="topluMusteriEkleModal()">📋 Toplu Ekle</button>
+        <button class="btn btn-ghost" onclick="tumPortalleriYenile()" title="Tüm müşterilerin portal verisini (geçmiş ödemeler dahil) yeniden gönderir">🔄 Tüm Portalleri Yenile</button>
       </div>` : ''}
     </div>
   `;
@@ -804,6 +805,16 @@ function rastgeleErisimKodu(){
   let kod = '';
   for(let i=0;i<20;i++) kod += alfabe[Math.floor(Math.random()*alfabe.length)];
   return kod;
+}
+// Portal'a "ödemeler" alanını sonradan eklediğimiz için, o zamandan önce oluşturulmuş
+// portal linkleri geçmiş ödemeleri içermiyordu. Bu fonksiyon, portal linki olan HERKESİ tek
+// seferde yeniden senkronlar (geçmiş ödemeler dahil).
+function tumPortalleriYenile(){
+  const linklideler = DATA.musteriler.filter(m=>m.erisimKodu);
+  if(!linklideler.length){ toast('Portal linki olan müşteri yok'); return; }
+  if(!confirm(`${linklideler.length} müşterinin portal verisi (geçmiş ödemeler dahil) yeniden gönderilecek. Devam edilsin mi?`)) return;
+  linklideler.forEach(m=>musteriPortalSenkronEt(m.id));
+  toast(`${linklideler.length} müşterinin portalı yenilendi ✓`);
 }
 function musteriPortalSenkronEt(musteriId){
   if(DEMO_MODE || !db) return;
@@ -1506,6 +1517,7 @@ window.toast = toast;
 window.todayISO = todayISO;
 window.toggleSablonAktif = toggleSablonAktif;
 window.topluMusteriEkleModal = topluMusteriEkleModal;
+window.tumPortalleriYenile = tumPortalleriYenile;
 window.turAdi = turAdi;
 window.whatsappGonderListeden = whatsappGonderListeden;
 window.whatsappMesajiAc = whatsappMesajiAc;
