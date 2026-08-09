@@ -816,8 +816,11 @@ function musteriPortalSenkronEt(musteriId){
   // sınırının çok altında kalıyor (her kayıt yaklaşık 100 bayt, 3000 kayıt ~300KB eder).
   const sonKayitlar = DATA.kayitlar.filter(k=>k.musteriId===musteriId).sort((a,b)=>a.tarih<b.tarih?1:-1).slice(0,3000)
     .map(k=>({tarih:k.tarih, urun:turAdi(k.turId), adet:k.adet, tutar:k.adet*k.birimFiyat, odendi:k.odendi}));
+  const sonOdemeler = DATA.odemeler.filter(o=>o.musteriId===musteriId).sort((a,b)=>a.tarih<b.tarih?1:-1).slice(0,1000)
+    .map(o=>({tarih:o.tarih, tutar:o.tutar, not:o.not||''}));
   db.collection('musteriPortal').doc(m.erisimKodu).set({
     ad: m.ad, bakiye: musteriBakiye(musteriId), acilisBakiyesi: Number(m.acilisBakiyesi)||0,
+    sonOdemeler,
     sifre: m.portalSifre || '', sonKayitlar, guncellenme: new Date().toISOString()
   }).catch(err=>console.error('Portal senkron hatası', err));
 }
@@ -1023,6 +1026,11 @@ function renderRaporSonuclari(){
     const rows = satirlar.map(k=>`
       <tr><td>${k.tarih}</td><td>${turAdi(k.turId)}</td><td>${k.adet}</td><td>₺${fmt(k.birimFiyat)}</td><td>₺${fmt(k.adet*k.birimFiyat)}</td></tr>
     `).join('');
+    const donemOdemeleri = DATA.odemeler.filter(o=>o.musteriId===raporSeciliMusteri && o.tarih>=bas && o.tarih<=bit).sort((a,b)=>a.tarih<b.tarih?-1:1);
+    const odemeToplam = donemOdemeleri.reduce((s,o)=>s+o.tutar,0);
+    const odemeRows = donemOdemeleri.map(o=>`
+      <tr><td>${o.tarih}</td><td>₺${fmt(o.tutar)}</td><td>${o.not||'—'}</td></tr>
+    `).join('');
     kap.innerHTML = `
       <div class="card" id="yazdirAlani">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
@@ -1030,14 +1038,23 @@ function renderRaporSonuclari(){
           <button class="iconbtn" onclick="raporDetayaKapat()" title="Kapat">✕</button>
         </div>
         <p style="font-size:12px;color:var(--muted);margin:4px 0 12px">${bas} — ${bit}</p>
-        <div style="background:var(--wheat);color:#fff;border-radius:12px;padding:12px 16px;margin-bottom:14px;text-align:center">
-          <div style="font-size:11px;opacity:.9">TOPLAM</div>
-          <div style="font-size:22px;font-weight:700">₺${fmt(toplam)}</div>
+        <div style="display:flex;gap:8px;margin-bottom:14px">
+          <div style="flex:1;background:var(--wheat);color:#fff;border-radius:12px;padding:12px 16px;text-align:center">
+            <div style="font-size:11px;opacity:.9">TESLİMAT TOPLAMI</div>
+            <div style="font-size:20px;font-weight:700">₺${fmt(toplam)}</div>
+          </div>
+          <div style="flex:1;background:var(--ok);color:#fff;border-radius:12px;padding:12px 16px;text-align:center">
+            <div style="font-size:11px;opacity:.9">ÖDEDİĞİ (BU DÖNEM)</div>
+            <div style="font-size:20px;font-weight:700">₺${fmt(odemeToplam)}</div>
+          </div>
         </div>
         <h3 style="font-size:13px;margin:0 0 8px">Ürün Bazlı Toplamlar</h3>
         <table style="margin-bottom:16px"><thead><tr><th>Ürün</th><th>Adet</th><th>Tutar</th></tr></thead>
         <tbody>${urunToplamRows}</tbody></table>
-        <h3 style="font-size:13px;margin:0 0 8px">Tüm İşlemler</h3>
+        <h3 style="font-size:13px;margin:0 0 8px">Ödemeler (Bu Dönem)</h3>
+        <table style="margin-bottom:16px"><thead><tr><th>Tarih</th><th>Tutar</th><th>Not</th></tr></thead>
+        <tbody>${odemeRows || `<tr><td colspan="3"><div class="empty">Bu dönemde ödeme yok.</div></td></tr>`}</tbody></table>
+        <h3 style="font-size:13px;margin:0 0 8px">Tüm Teslimatlar</h3>
         <table><thead><tr><th>Tarih</th><th>Ürün</th><th>Adet</th><th>B.Fiyat</th><th>Tutar</th></tr></thead>
         <tbody>${rows || `<tr><td colspan="5"><div class="empty">Bu dönemde kayıt yok.</div></td></tr>`}</tbody></table>
         <div style="text-align:right;font-weight:700;font-size:16px;margin-top:12px;padding-top:12px;border-top:1.5px solid var(--card-border)">
