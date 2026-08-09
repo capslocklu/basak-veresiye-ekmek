@@ -113,6 +113,12 @@ function sifreKontrolEt(){
 function hesabiGoster(){
   const bakiye = veri.bakiye || 0;
   const kayitlar = veri.sonKayitlar || [];
+  const odemeler = veri.sonOdemeler || [];
+
+  const odemeRows = odemeler.map(o=>`
+    <tr><td>${o.tarih}</td><td>₺${fmt(o.tutar)}</td><td>${o.not||'—'}</td></tr>
+  `).join('');
+  const toplamOdenen = odemeler.reduce((s,o)=>s+o.tutar,0);
 
   // Tüm zamanlar için ürün bazlı toplam (kaç adet hangi ekmekten alınmış)
   const urunToplam = {};
@@ -163,6 +169,14 @@ function hesabiGoster(){
           Bu, ${(veri.acilisBakiyesi>0 ? 'sistem öncesinden devreden ₺'+fmt(veri.acilisBakiyesi)+' borcunuzu' : 'sistem öncesinden devreden ₺'+fmt(-veri.acilisBakiyesi)+' alacağınızı')} da içerir.
         </div>
       ` : ''}
+    </div>
+    <div class="card">
+      <h3 style="margin:0 0 10px;font-size:14px;">Ödemeleriniz</h3>
+      <table><thead><tr><th>Tarih</th><th>Tutar</th><th>Not</th></tr></thead>
+      <tbody>${odemeRows || `<tr><td colspan="3" class="empty">Henüz ödeme kaydı yok.</td></tr>`}</tbody></table>
+      <div style="text-align:right;font-weight:700;font-size:14px;margin-top:10px;padding-top:10px;border-top:1.5px solid var(--card-border)">
+        Toplam Ödediğiniz: ₺${fmt(toplamOdenen)}
+      </div>
     </div>
     <div class="card">
       <h3 style="margin:0 0 10px;font-size:14px;">Ürün Bazlı Toplam (Tüm Zamanlar)</h3>
