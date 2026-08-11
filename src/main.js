@@ -1115,14 +1115,23 @@ function renderRaporSonuclari(){
 
   const musteriToplam = {};
   kayitlar.forEach(k=>{
-    if(!musteriToplam[k.musteriId]) musteriToplam[k.musteriId] = {adet:0, tutar:0};
+    if(!musteriToplam[k.musteriId]) musteriToplam[k.musteriId] = {adet:0, tutar:0, urunler:{}};
     musteriToplam[k.musteriId].adet += k.adet;
     musteriToplam[k.musteriId].tutar += k.adet*k.birimFiyat;
+    if(!musteriToplam[k.musteriId].urunler[k.turId]) musteriToplam[k.musteriId].urunler[k.turId] = 0;
+    musteriToplam[k.musteriId].urunler[k.turId] += k.adet;
   });
   const musteriRows = Object.entries(musteriToplam)
     .filter(([mid])=>musteriBakiyeGorulebilir(mid))
     .sort((a,b)=>b[1].tutar-a[1].tutar)
-    .map(([mid,v])=>`<tr style="cursor:pointer" onclick="raporMusteriSec('${mid}')"><td>${musteriAdi(mid)}</td><td>${v.adet}</td><td>₺${fmt(v.tutar)}</td></tr>`).join('');
+    .map(([mid,v])=>{
+      const urunOzet = Object.entries(v.urunler).sort((a,b)=>b[1]-a[1])
+        .map(([tid,adet])=>`${turAdi(tid)}: ${adet}`).join(', ');
+      return `<tr style="cursor:pointer" onclick="raporMusteriSec('${mid}')">
+        <td>${musteriAdi(mid)}<br><span style="font-size:11px;color:var(--muted);font-weight:400">${urunOzet}</span></td>
+        <td>${v.adet}</td><td>₺${fmt(v.tutar)}</td>
+      </tr>`;
+    }).join('');
 
   const turToplam = {};
   kayitlar.forEach(k=>{
