@@ -298,6 +298,7 @@ window.addEventListener('load', ()=>{
       if(u){ currentUser=u; enterApp(); }
     }
   } else {
+    otomatikGirisDurumGoster('Oturum kontrol ediliyor...');
     auth.onAuthStateChanged(user=>{
       if(user && !currentUser && !_manuelGirisSurmekte){
         firestoreVerisiniYukle().then(()=>{
@@ -307,10 +308,17 @@ window.addEventListener('load', ()=>{
             currentUser = u;
             canliSenkronuBaslat();
             enterApp();
+          } else {
+            otomatikGirisDurumGoster('');
           }
           // Kullanıcı DATA.users içinde yoksa sessizce giriş ekranında bırakıyoruz —
           // silinmiş/kaldırılmış bir personel bu şekilde otomatik oturum açamaz.
+        }).catch(err=>{
+          console.error('Otomatik giriş kontrolü başarısız:', err);
+          otomatikGirisDurumGoster('Oturum kontrolü başarısız oldu (' + (err.code||'bağlantı sorunu') + '). Lütfen tekrar giriş yap.');
         });
+      } else if(!user){
+        otomatikGirisDurumGoster('');
       }
     });
   }
@@ -318,6 +326,14 @@ window.addEventListener('load', ()=>{
     navigator.serviceWorker.register('./service-worker.js').catch(()=>{});
   }
 });
+function otomatikGirisDurumGoster(mesaj){
+  const errBox = document.getElementById('loginErr');
+  if(!errBox) return;
+  if(!mesaj){ errBox.style.display='none'; return; }
+  errBox.textContent = mesaj;
+  errBox.style.display = 'block';
+  errBox.style.background = mesaj.includes('başarısız') ? '' : 'rgba(226,167,101,0.2)';
+}
 
 /* ---------------- SEKMELER ---------------- */
 let activeTab = 'ozet';
@@ -1484,6 +1500,7 @@ window.musteriToplamBorc = musteriToplamBorc;
 window.musteriToplamOdenen = musteriToplamOdenen;
 window.odemeAlModal = odemeAlModal;
 window.odemeGecmisiModal = odemeGecmisiModal;
+window.otomatikGirisDurumGoster = otomatikGirisDurumGoster;
 window.persist = persist;
 window.portalLinkKopyala = portalLinkKopyala;
 window.portalWhatsappGonder = portalWhatsappGonder;
