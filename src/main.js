@@ -290,24 +290,32 @@ window.addEventListener('offline', ()=>{
   toast('🔴 İnternet bağlantın kesildi — girdiklerin kaybolmaz, bağlantı gelince otomatik gönderilir.');
 });
 window.addEventListener('load', ()=>{
+  girisGunlukEkle('Sayfa yüklendi. DEMO_MODE=' + DEMO_MODE);
   baglantiRozetiGuncelle();
   if(DEMO_MODE){
     const remembered = localStorage.getItem('veresiyeTakip_rememberedUser');
+    girisGunlukEkle('Demo mod — hatırlanan kullanıcı: ' + (remembered||'yok'));
     if(remembered){
       const u = DATA.users.find(x=>x.email===remembered);
       if(u){ currentUser=u; enterApp(); }
     }
   } else {
+    girisGunlukEkle('Gerçek Firebase modu — auth.onAuthStateChanged dinleniyor...');
     otomatikGirisDurumGoster('Oturum kontrol ediliyor...');
     auth.onAuthStateChanged(user=>{
+      girisGunlukEkle('onAuthStateChanged tetiklendi. user=' + (user ? user.email : 'null') + ', currentUser=' + (currentUser?currentUser.email:'null') + ', manuelGiris=' + _manuelGirisSurmekte);
       if(user && !currentUser && !_manuelGirisSurmekte){
+        girisGunlukEkle('Firestore\'dan veri çekiliyor...');
         firestoreVerisiniYukle().then(()=>{
+          girisGunlukEkle('Firestore verisi geldi. DATA.users sayısı: ' + (DATA.users?DATA.users.length:0));
           const kullaniciAdi = kullaniciAdiCoz(user.email);
           const u = DATA.users.find(x=>x.email.toLowerCase()===kullaniciAdi.toLowerCase());
+          girisGunlukEkle('Aranan kullanıcı adı: ' + kullaniciAdi + ' — bulundu mu: ' + (u?'EVET':'HAYIR'));
           if(u){
             currentUser = u;
             canliSenkronuBaslat();
             enterApp();
+            girisGunlukEkle('Giriş başarılı, uygulamaya geçiliyor.');
           } else {
             otomatikGirisDurumGoster('');
           }
@@ -315,9 +323,11 @@ window.addEventListener('load', ()=>{
           // silinmiş/kaldırılmış bir personel bu şekilde otomatik oturum açamaz.
         }).catch(err=>{
           console.error('Otomatik giriş kontrolü başarısız:', err);
+          girisGunlukEkle('HATA: ' + (err.code||err.message||err));
           otomatikGirisDurumGoster('Oturum kontrolü başarısız oldu (' + (err.code||'bağlantı sorunu') + '). Lütfen tekrar giriş yap.');
         });
       } else if(!user){
+        girisGunlukEkle('Firebase\'e göre kayıtlı oturum yok (user=null).');
         otomatikGirisDurumGoster('');
       }
     });
@@ -333,6 +343,14 @@ function otomatikGirisDurumGoster(mesaj){
   errBox.textContent = mesaj;
   errBox.style.display = 'block';
   errBox.style.background = mesaj.includes('başarısız') ? '' : 'rgba(226,167,101,0.2)';
+}
+// Konsola erişimi olmayan (mobil) kullanıcılar için, giriş ekranının en altında görünen,
+// ekran görüntüsüyle paylaşılabilir bir adım adım hata ayıklama günlüğü.
+window._girisGunlugu = [];
+function girisGunlukEkle(satir){
+  window._girisGunlugu.push(new Date().toLocaleTimeString('tr-TR') + ' — ' + satir);
+  const el = document.getElementById('girisDebugLog');
+  if(el) el.textContent = window._girisGunlugu.join('\n');
 }
 
 /* ---------------- SEKMELER ---------------- */
@@ -1475,6 +1493,7 @@ window.fabAction = fabAction;
 window.firestoreVerisiniYukle = firestoreVerisiniYukle;
 window.fmt = fmt;
 window.gecmisFiyatDuzelt = gecmisFiyatDuzelt;
+window.girisGunlukEkle = girisGunlukEkle;
 window.gorunurBakiyeMusteriIdleri = gorunurBakiyeMusteriIdleri;
 window.gunlukGirisGrupla = gunlukGirisGrupla;
 window.gunlukGirisKaydet = gunlukGirisKaydet;
