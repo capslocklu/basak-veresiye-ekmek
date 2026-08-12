@@ -268,6 +268,23 @@ function doLogout(){
   document.getElementById('app').style.display = 'none';
   document.getElementById('loginScreen').style.display = 'flex';
 }
+// Üstteki "Yenile" butonu — SAYFAYI YENİDEN YÜKLEMEZ (bu, giriş ekranına düşme riski taşırdı),
+// sadece Firestore'dan en güncel veriyi çekip mevcut sekmeyi yeniden çizer.
+function verileriYenile(){
+  if(DEMO_MODE){
+    toast('Yenilendi ✓');
+    renderTab(activeTab);
+    return;
+  }
+  toast('Yenileniyor...');
+  firestoreVerisiniYukle().then(()=>{
+    toast('Yenilendi ✓');
+    renderTab(activeTab);
+  }).catch(err=>{
+    console.error('Yenileme hatası', err);
+    toast('⚠️ Yenilenemedi: ' + (err.code||err.message||'bilinmeyen hata'));
+  });
+}
 function enterApp(){
   document.getElementById('loginScreen').style.display = 'none';
   document.getElementById('app').style.display = 'block';
@@ -475,18 +492,26 @@ function kaydetYeniKayit(){
 }
 
 /* ---------------- KAYITLAR (geçmiş liste) ---------------- */
+let kayitlarAltSekme = 'teslimat';
+function kayitlarAltSekmeDegistir(sekme){
+  kayitlarAltSekme = sekme;
+  renderTab('kayitlar');
+}
 function renderKayitlarTab(main){
   const kayitlar = [...DATA.kayitlar].sort((a,b)=>a.tarih<b.tarih?1:-1);
   const odemeler = [...DATA.odemeler].sort((a,b)=>a.tarih<b.tarih?1:-1);
   main.innerHTML = `
     <div class="card">
-      <h2>Kayıtlar (Teslimatlar)</h2>
-      <button class="btn btn-primary" style="margin-bottom:14px" onclick="acYeniKayitModal()">➕ Yeni Kayıt</button>
-      ${renderKayitTablosu(kayitlar)}
-    </div>
-    <div class="card">
-      <h2>Ödemeler (Tahsilatlar)</h2>
-      ${renderOdemeTablosu(odemeler)}
+      <div style="display:flex;gap:8px;margin-bottom:14px">
+        <button class="btn ${kayitlarAltSekme==='teslimat'?'btn-primary':'btn-ghost'}" style="flex:1" onclick="kayitlarAltSekmeDegistir('teslimat')">📦 Teslimatlar</button>
+        <button class="btn ${kayitlarAltSekme==='odeme'?'btn-primary':'btn-ghost'}" style="flex:1" onclick="kayitlarAltSekmeDegistir('odeme')">💳 Ödemeler</button>
+      </div>
+      ${kayitlarAltSekme==='teslimat' ? `
+        <button class="btn btn-primary" style="margin-bottom:14px" onclick="acYeniKayitModal()">➕ Yeni Kayıt</button>
+        ${renderKayitTablosu(kayitlar)}
+      ` : `
+        ${renderOdemeTablosu(odemeler)}
+      `}
     </div>
   `;
 }
@@ -1597,6 +1622,7 @@ window.kaydetOdeme = kaydetOdeme;
 window.kaydetTopluMusteri = kaydetTopluMusteri;
 window.kaydetYeniKayit = kaydetYeniKayit;
 window.kayitFiyatGuncelle = kayitFiyatGuncelle;
+window.kayitlarAltSekmeDegistir = kayitlarAltSekmeDegistir;
 window.kullaniciAdiCoz = kullaniciAdiCoz;
 window.musteriAdi = musteriAdi;
 window.musteriAramaFiltrele = musteriAramaFiltrele;
@@ -1661,5 +1687,6 @@ window.toggleSablonAktif = toggleSablonAktif;
 window.topluMusteriEkleModal = topluMusteriEkleModal;
 window.tumPortalleriYenile = tumPortalleriYenile;
 window.turAdi = turAdi;
+window.verileriYenile = verileriYenile;
 window.whatsappGonderListeden = whatsappGonderListeden;
 window.whatsappMesajiAc = whatsappMesajiAc;
