@@ -493,16 +493,30 @@ function kaydetYeniKayit(){
 
 /* ---------------- KAYITLAR (geçmiş liste) ---------------- */
 let kayitlarAltSekme = 'teslimat';
+let kayitlarDonemTipi = 'tumu';
+let kayitlarBaslangic = null;
+let kayitlarBitis = null;
+function kayitlarDonemDegisti(tip){
+  kayitlarDonemTipi = tip;
+  renderTab('kayitlar');
+}
+function kayitlarOzelTarihGuncelle(){
+  kayitlarBaslangic = document.getElementById('kayitlarBas').value;
+  kayitlarBitis = document.getElementById('kayitlarBit').value;
+  renderTab('kayitlar');
+}
 function kayitlarAltSekmeDegistir(sekme){
   kayitlarAltSekme = sekme;
   renderTab('kayitlar');
 }
 function renderKayitlarTab(main){
-  const kayitlar = [...DATA.kayitlar].sort((a,b)=>a.tarih<b.tarih?1:-1);
-  const odemeler = [...DATA.odemeler].sort((a,b)=>a.tarih<b.tarih?1:-1);
+  const {bas, bit} = donemTarihAraligiHesapla(kayitlarDonemTipi, kayitlarBaslangic, kayitlarBitis);
+  const kayitlar = [...DATA.kayitlar].filter(k=>k.tarih>=bas && k.tarih<=bit).sort((a,b)=>a.tarih<b.tarih?1:-1);
+  const odemeler = [...DATA.odemeler].filter(o=>o.tarih>=bas && o.tarih<=bit).sort((a,b)=>a.tarih<b.tarih?1:-1);
   main.innerHTML = `
     <div class="card">
-      <div style="display:flex;gap:8px;margin-bottom:14px">
+      ${donemSecimHtml('kayitlar', kayitlarDonemTipi, kayitlarBaslangic, kayitlarBitis, 'kayitlarDonemDegisti')}
+      <div style="display:flex;gap:8px;margin:14px 0">
         <button class="btn ${kayitlarAltSekme==='teslimat'?'btn-primary':'btn-ghost'}" style="flex:1" onclick="kayitlarAltSekmeDegistir('teslimat')">📦 Teslimatlar</button>
         <button class="btn ${kayitlarAltSekme==='odeme'?'btn-primary':'btn-ghost'}" style="flex:1" onclick="kayitlarAltSekmeDegistir('odeme')">💳 Ödemeler</button>
       </div>
@@ -1093,24 +1107,59 @@ function silTur(id){
 let raporDonemTipi = 'bu_ay';
 let raporBaslangic = null;
 let raporBitis = null;
-function raporTarihAraligiHesapla(){
+// Hem Raporlar hem Kayıtlar sekmesinin ortak kullandığı tarih aralığı hesaplayıcı.
+function donemTarihAraligiHesapla(tip, ozelBas, ozelBit){
   const bugun = new Date(todayISO()+'T00:00:00');
   let bas, bit;
-  if(raporDonemTipi==='bugun'){
+  if(tip==='bugun'){
     bas = bit = todayISO();
-  } else if(raporDonemTipi==='bu_hafta'){
+  } else if(tip==='dun'){
+    const d = new Date(bugun); d.setDate(d.getDate()-1);
+    bas = bit = d.toISOString().slice(0,10);
+  } else if(tip==='bu_hafta'){
     const gun = bugun.getDay(); // 0=Pazar
     const pazartesi = new Date(bugun); pazartesi.setDate(bugun.getDate() - ((gun+6)%7));
     bas = pazartesi.toISOString().slice(0,10);
     bit = todayISO();
-  } else if(raporDonemTipi==='bu_ay'){
+  } else if(tip==='bu_ay'){
     bas = todayISO().slice(0,8)+'01';
     bit = todayISO();
-  } else if(raporDonemTipi==='ozel'){
-    bas = raporBaslangic || todayISO();
-    bit = raporBitis || todayISO();
+  } else if(tip==='gecen_ay'){
+    const ilkGunBuAy = new Date(todayISO().slice(0,8)+'01T00:00:00');
+    const sonGunGecenAy = new Date(ilkGunBuAy); sonGunGecenAy.setDate(0); // geçen ayın son günü
+    const ilkGunGecenAy = new Date(sonGunGecenAy.getFullYear(), sonGunGecenAy.getMonth(), 1);
+    bas = ilkGunGecenAy.toISOString().slice(0,10);
+    bit = sonGunGecenAy.toISOString().slice(0,10);
+  } else if(tip==='ozel'){
+    bas = ozelBas || todayISO();
+    bit = ozelBit || todayISO();
+  } else { // 'tumu'
+    bas = '0000-01-01'; bit = '9999-12-31';
   }
   return {bas, bit};
+}
+function donemSecimHtml(idPrefix, aktifTip, ozelBas, ozelBit, onDegisti){
+  return `
+    <label>Dönem</label>
+    <select id="${idPrefix}DonemSecim" onchange="${onDegisti}(this.value)">
+      <option value="tumu" ${aktifTip==='tumu'?'selected':''}>Tümü</option>
+      <option value="bugun" ${aktifTip==='bugun'?'selected':''}>Bugün</option>
+      <option value="dun" ${aktifTip==='dun'?'selected':''}>Dün</option>
+      <option value="bu_hafta" ${aktifTip==='bu_hafta'?'selected':''}>Bu Hafta</option>
+      <option value="bu_ay" ${aktifTip==='bu_ay'?'selected':''}>Bu Ay</option>
+      <option value="gecen_ay" ${aktifTip==='gecen_ay'?'selected':''}>Geçen Ay</option>
+      <option value="ozel" ${aktifTip==='ozel'?'selected':''}>Özel Tarih Aralığı</option>
+    </select>
+    ${aktifTip==='ozel' ? `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div><label>Başlangıç</label><input id="${idPrefix}Bas" type="date" value="${ozelBas||todayISO()}" onchange="${idPrefix}OzelTarihGuncelle()"></div>
+        <div><label>Bitiş</label><input id="${idPrefix}Bit" type="date" value="${ozelBit||todayISO()}" onchange="${idPrefix}OzelTarihGuncelle()"></div>
+      </div>
+    ` : ''}
+  `;
+}
+function raporTarihAraligiHesapla(){
+  return donemTarihAraligiHesapla(raporDonemTipi, raporBaslangic, raporBitis);
 }
 function raporDonemDegisti(tip){
   raporDonemTipi = tip;
@@ -1127,19 +1176,7 @@ function renderRaporlarTab(main){
   main.innerHTML = `
     <div class="card">
       <h2>Raporlar</h2>
-      <label>Dönem</label>
-      <select id="raporDonemSecim" onchange="raporDonemDegisti(this.value)">
-        <option value="bugun" ${raporDonemTipi==='bugun'?'selected':''}>Bugün</option>
-        <option value="bu_hafta" ${raporDonemTipi==='bu_hafta'?'selected':''}>Bu Hafta</option>
-        <option value="bu_ay" ${raporDonemTipi==='bu_ay'?'selected':''}>Bu Ay</option>
-        <option value="ozel" ${raporDonemTipi==='ozel'?'selected':''}>Özel Tarih Aralığı</option>
-      </select>
-      ${raporDonemTipi==='ozel' ? `
-        <div class="grid2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-          <div><label>Başlangıç</label><input id="raporBas" type="date" value="${raporBaslangic||todayISO()}" onchange="raporOzelTarihGuncelle()"></div>
-          <div><label>Bitiş</label><input id="raporBit" type="date" value="${raporBitis||todayISO()}" onchange="raporOzelTarihGuncelle()"></div>
-        </div>
-      ` : ''}
+      ${donemSecimHtml('rapor', raporDonemTipi, raporBaslangic, raporBitis, 'raporDonemDegisti')}
       <p style="font-size:11.5px;color:var(--muted);margin:10px 0 0">
         Tablodaki bir müşteri veya ürün satırına dokunursan, o tarih aralığındaki tüm işlemlerinin
         ayrıntılı dökümünü (fatura kesmeye uygun) görürsün.
@@ -1602,6 +1639,8 @@ window.demoSave = demoSave;
 window.demoSeed = demoSeed;
 window.doLogin = doLogin;
 window.doLogout = doLogout;
+window.donemSecimHtml = donemSecimHtml;
+window.donemTarihAraligiHesapla = donemTarihAraligiHesapla;
 window.editKayitModal = editKayitModal;
 window.editMusteriModal = editMusteriModal;
 window.editOdemeModal = editOdemeModal;
@@ -1624,6 +1663,8 @@ window.kaydetTopluMusteri = kaydetTopluMusteri;
 window.kaydetYeniKayit = kaydetYeniKayit;
 window.kayitFiyatGuncelle = kayitFiyatGuncelle;
 window.kayitlarAltSekmeDegistir = kayitlarAltSekmeDegistir;
+window.kayitlarDonemDegisti = kayitlarDonemDegisti;
+window.kayitlarOzelTarihGuncelle = kayitlarOzelTarihGuncelle;
 window.kullaniciAdiCoz = kullaniciAdiCoz;
 window.musteriAdi = musteriAdi;
 window.musteriAramaFiltrele = musteriAramaFiltrele;
