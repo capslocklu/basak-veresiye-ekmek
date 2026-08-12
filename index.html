@@ -53,7 +53,7 @@ td{padding:9px 4px;border-bottom:1px solid var(--card-border);vertical-align:mid
 .rememberRow{display:flex;align-items:center;gap:8px;margin-bottom:16px;color:rgba(255,255,255,0.8);font-size:13.5px;}
 .rememberRow input{width:auto;margin:0;}
 #app{display:none;}
-header.topbar{background:var(--oven);color:#fff;padding:16px 18px;display:flex;justify-content:space-between;align-items:center;}
+header.topbar{background:var(--oven);color:#fff;padding:16px 18px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:30;}
 header.topbar h1{color:#fff;font-size:19px;}
 .logout{background:rgba(255,255,255,0.1);color:#fff;padding:8px 14px;border-radius:10px;font-size:13px;}
 #baglantiRozeti{display:none;background:var(--danger);color:#fff;text-align:center;font-size:12.5px;font-weight:600;padding:7px 12px;}
@@ -104,7 +104,10 @@ main{padding:16px;max-width:720px;margin:0 auto;}
       <h1>🍞 Veresiye Takip</h1>
       <div id="whoLabel" style="font-size:11.5px;color:rgba(255,255,255,0.6)">—</div>
     </div>
-    <button class="logout" onclick="doLogout()">Çıkış</button>
+    <div style="display:flex;gap:8px">
+      <button class="logout" onclick="verileriYenile()" title="Sayfayı yeniden yüklemeden en güncel veriyi çeker">🔄 Yenile</button>
+      <button class="logout" onclick="doLogout()">Çıkış</button>
+    </div>
   </header>
   <div id="baglantiRozeti">🔴 Çevrimdışısın — girdiğin bilgiler kaybolmaz, internet gelince otomatik gönderilir.</div>
   <nav class="tabs" id="tabsNav"></nav>
