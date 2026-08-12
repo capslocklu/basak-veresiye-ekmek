@@ -1515,7 +1515,10 @@ function renderGunlukGirisTab(main){
       ${gecmisMi ? `<p style="font-size:11.5px;color:var(--crust);margin:0">📅 Geçmiş bir tarih için giriş yapıyorsun.</p>` : ''}
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">${gruplarHtml}</div>
-    <button class="btn btn-primary btn-block" onclick="gunlukGirisKaydet()">✓ Tümünü Kaydet</button>
+    <div style="height:70px"></div>
+    <div style="position:fixed;left:0;right:0;bottom:0;padding:12px 90px 12px 16px;padding-bottom:calc(12px + env(safe-area-inset-bottom));background:linear-gradient(to top, var(--bg) 60%, transparent);z-index:40;">
+      <button class="btn btn-primary btn-block" style="box-shadow:0 -4px 14px rgba(0,0,0,0.12)" onclick="gunlukGirisKaydet()">✓ Tümünü Kaydet</button>
+    </div>
   `;
 }
 function gunlukGirisKaydet(){
