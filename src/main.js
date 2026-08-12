@@ -510,6 +510,7 @@ function renderKayitlarTab(main){
         <button class="btn btn-primary" style="margin-bottom:14px" onclick="acYeniKayitModal()">➕ Yeni Kayıt</button>
         ${renderKayitTablosu(kayitlar)}
       ` : `
+        <button class="btn btn-primary" style="margin-bottom:14px" onclick="acGenelOdemeModal()">💳 Ödeme Al</button>
         ${renderOdemeTablosu(odemeler)}
       `}
     </div>
