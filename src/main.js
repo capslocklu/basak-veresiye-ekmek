@@ -1488,20 +1488,20 @@ function renderGunlukGirisTab(main){
       if(!t) return '';
       const deger = window.girisAdetleri[s.id];
       return `
-      <div style="margin-bottom:8px">
-        <div style="font-size:11px;color:var(--muted);margin-bottom:3px">${t.ad}</div>
+      <div style="margin-bottom:6px">
+        <div style="font-size:9px;color:var(--muted);margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t.ad}</div>
         <input type="number" min="0" inputmode="numeric" placeholder="—" value="${deger===undefined||deger===''?'':deger}"
           oninput="window.girisAdetleri['${s.id}']=this.value===''?'':Number(this.value)"
-          style="margin-bottom:0;padding:9px 8px;text-align:center;font-weight:600;">
+          style="margin-bottom:0;padding:6px 4px;text-align:center;font-weight:600;font-size:12px;">
       </div>`;
     }).join('');
     return `
-    <div class="card" style="margin-bottom:0;padding:14px">
-      <div style="margin-bottom:8px">
-        <b style="font-size:14px">${m.ad}</b>
-        <label style="font-size:11px;font-weight:500;display:flex;align-items:center;gap:4px;white-space:nowrap;color:var(--text);margin-top:4px">
-          <input type="checkbox" style="width:auto;margin:0" ${odendi?'checked':''} onchange="window.girisOdendi['${g.musteriId}']=this.checked">
-          Bugün Ödendi
+    <div class="card" style="margin-bottom:0;padding:8px">
+      <div style="margin-bottom:6px">
+        <b style="font-size:11.5px;line-height:1.2;display:block">${m.ad}</b>
+        <label style="font-size:9.5px;font-weight:500;display:flex;align-items:center;gap:3px;white-space:nowrap;color:var(--text);margin-top:3px">
+          <input type="checkbox" style="width:12px;height:12px;margin:0" ${odendi?'checked':''} onchange="window.girisOdendi['${g.musteriId}']=this.checked">
+          Ödendi
         </label>
       </div>
       ${hucreler}
@@ -1514,7 +1514,7 @@ function renderGunlukGirisTab(main){
       <input type="date" value="${girisTarih}" max="${todayISO()}" onchange="degistirGunlukGirisTarihi(this.value)">
       ${gecmisMi ? `<p style="font-size:11.5px;color:var(--crust);margin:0">📅 Geçmiş bir tarih için giriş yapıyorsun.</p>` : ''}
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">${gruplarHtml}</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:14px">${gruplarHtml}</div>
     <div style="height:70px"></div>
     <div style="position:fixed;left:0;right:0;bottom:0;padding:12px 90px 12px 16px;padding-bottom:calc(12px + env(safe-area-inset-bottom));background:linear-gradient(to top, var(--bg) 60%, transparent);z-index:40;">
       <button class="btn btn-primary btn-block" style="box-shadow:0 -4px 14px rgba(0,0,0,0.12)" onclick="gunlukGirisKaydet()">✓ Tümünü Kaydet</button>
