@@ -127,7 +127,16 @@ function canliSenkronuBaslat(){
 
 /* ---------------- YARDIMCI FONKSİYONLAR ---------------- */
 function fmt(n){ return Number(n||0).toLocaleString('tr-TR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
-function todayISO(){ return new Date().toISOString().slice(0,10); }
+// ÖNEMLİ: JavaScript'in Date().toISOString()'ı her zaman UTC (İngiltere saati) döndürür.
+// Türkiye UTC+3 olduğu için, gece yarısından sonraki ilk birkaç saatte bu doğrudan kullanılırsa
+// "bugün" yanlış (bir gün geriden) hesaplanır — "Dün", "Bu Ay" gibi tüm filtreler kayardı.
+// Bu fonksiyon, bir Date nesnesini ÖNCE yerel saat dilimine göre kaydırıp SONRA ISO'ya çeviriyor,
+// böylece her zaman kullanıcının kendi yerel tarihini doğru verir.
+function localISO(d){
+  const yerel = new Date(d.getTime() - d.getTimezoneOffset()*60000);
+  return yerel.toISOString().slice(0,10);
+}
+function todayISO(){ return localISO(new Date()); }
 function toast(msg){
   const el = document.getElementById('toast');
   el.textContent = msg;
@@ -1115,12 +1124,13 @@ function donemTarihAraligiHesapla(tip, ozelBas, ozelBit){
     bas = bit = todayISO();
   } else if(tip==='dun'){
     const d = new Date(bugun); d.setDate(d.getDate()-1);
-    bas = bit = d.toISOString().slice(0,10);
+    bas = bit = localISO(d);
   } else if(tip==='bu_hafta'){
     const gun = bugun.getDay(); // 0=Pazar
     const pazartesi = new Date(bugun); pazartesi.setDate(bugun.getDate() - ((gun+6)%7));
-    bas = pazartesi.toISOString().slice(0,10);
-    bit = todayISO();
+    const pazar = new Date(pazartesi); pazar.setDate(pazartesi.getDate()+6);
+    bas = localISO(pazartesi);
+    bit = localISO(pazar);
   } else if(tip==='bu_ay'){
     bas = todayISO().slice(0,8)+'01';
     bit = todayISO();
@@ -1128,8 +1138,8 @@ function donemTarihAraligiHesapla(tip, ozelBas, ozelBit){
     const ilkGunBuAy = new Date(todayISO().slice(0,8)+'01T00:00:00');
     const sonGunGecenAy = new Date(ilkGunBuAy); sonGunGecenAy.setDate(0); // geçen ayın son günü
     const ilkGunGecenAy = new Date(sonGunGecenAy.getFullYear(), sonGunGecenAy.getMonth(), 1);
-    bas = ilkGunGecenAy.toISOString().slice(0,10);
-    bit = sonGunGecenAy.toISOString().slice(0,10);
+    bas = localISO(ilkGunGecenAy);
+    bit = localISO(sonGunGecenAy);
   } else if(tip==='ozel'){
     bas = ozelBas || todayISO();
     bit = ozelBit || todayISO();
@@ -1666,6 +1676,7 @@ window.kayitlarAltSekmeDegistir = kayitlarAltSekmeDegistir;
 window.kayitlarDonemDegisti = kayitlarDonemDegisti;
 window.kayitlarOzelTarihGuncelle = kayitlarOzelTarihGuncelle;
 window.kullaniciAdiCoz = kullaniciAdiCoz;
+window.localISO = localISO;
 window.musteriAdi = musteriAdi;
 window.musteriAramaFiltrele = musteriAramaFiltrele;
 window.musteriAramaGuncelle = musteriAramaGuncelle;
