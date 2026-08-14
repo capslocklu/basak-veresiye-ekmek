@@ -845,7 +845,13 @@ function renderUnHesapliGirisTab(main){
   }
   const kartlar = unMusteriler.map(m=>{
     const odendi = window.unGirisOdendi[m.id]===undefined ? false : window.unGirisOdendi[m.id];
-    const urunSatirlari = DATA.ekmekTurleri.map(t=>{
+    // Bu müşteri için Giriş Şablonu'nda tanımlı (aktif) ürünler varsa SADECE onları göster;
+    // hiç şablon satırı yoksa (henüz ayarlanmamışsa) tüm ürünleri göstererek çalışmaya devam eder.
+    const sablonTurIdleri = DATA.sablon.filter(s=>s.musteriId===m.id && s.aktif!==false).map(s=>s.turId);
+    const gosterilecekUrunler = sablonTurIdleri.length
+      ? DATA.ekmekTurleri.filter(t=>sablonTurIdleri.includes(t.id))
+      : DATA.ekmekTurleri;
+    const urunSatirlari = gosterilecekUrunler.map(t=>{
       const fiyat = birimFiyatHesapla(m.id, t.id);
       const key = m.id+'_'+t.id;
       const deger = window.unGirisAdetleri[key];
@@ -860,6 +866,7 @@ function renderUnHesapliGirisTab(main){
     }).join('');
     return `
     <div class="card">
+      ${!sablonTurIdleri.length ? `<p style="font-size:10.5px;color:var(--crust);margin:0 0 8px">⚠️ Şablon ayarlı değil, tüm ürünler gösteriliyor — Giriş Şablonu'ndan bu müşteri için sadece Baston/Tost gibi ürünleri seçersen liste sadeleşir.</p>` : ''}
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px">
         <b>${m.ad}</b>
         <label style="font-size:11.5px;font-weight:500;display:flex;align-items:center;gap:4px;white-space:nowrap;color:var(--text)">
