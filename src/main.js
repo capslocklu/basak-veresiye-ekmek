@@ -302,6 +302,40 @@ function enterApp(){
   buildTabs();
   renderTab('ozet');
 }
+/* ---------------- KARANLIK MOD & YAZI BOYUTU (cihaza özel, localStorage) ---------------- */
+function applyTheme(){
+  const tema = localStorage.getItem('veresiyeTakip_tema') || 'light';
+  document.documentElement.setAttribute('data-theme', tema);
+  const btn = document.getElementById('themeBtn');
+  if(btn) btn.textContent = tema==='dark' ? '☀️' : '🌙';
+}
+function toggleTheme(){
+  const guncel = localStorage.getItem('veresiyeTakip_tema') || 'light';
+  localStorage.setItem('veresiyeTakip_tema', guncel==='dark' ? 'light' : 'dark');
+  applyTheme();
+}
+function applyFontSize(){
+  const boyut = localStorage.getItem('veresiyeTakip_fontBoyutu') || 'orta';
+  document.body.classList.remove('fontKucuk','fontOrta','fontBuyuk');
+  document.body.classList.add(boyut==='kucuk' ? 'fontKucuk' : boyut==='buyuk' ? 'fontBuyuk' : 'fontOrta');
+}
+function openFontSizeModal(){
+  const guncel = localStorage.getItem('veresiyeTakip_fontBoyutu') || 'orta';
+  showModal(`
+    <button class="modalClose" onclick="closeModal()">✕</button>
+    <h3>Yazı Boyutu</h3>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">
+      <button class="btn ${guncel==='kucuk'?'btn-primary':'btn-ghost'}" onclick="setFontSize('kucuk')">Küçük</button>
+      <button class="btn ${guncel==='orta'?'btn-primary':'btn-ghost'}" onclick="setFontSize('orta')">Orta (Varsayılan)</button>
+      <button class="btn ${guncel==='buyuk'?'btn-primary':'btn-ghost'}" onclick="setFontSize('buyuk')">Büyük</button>
+    </div>
+  `);
+}
+function setFontSize(boyut){
+  localStorage.setItem('veresiyeTakip_fontBoyutu', boyut);
+  applyFontSize();
+  closeModal();
+}
 function baglantiRozetiGuncelle(){
   const rozet = document.getElementById('baglantiRozeti');
   if(!rozet) return;
@@ -316,6 +350,8 @@ window.addEventListener('offline', ()=>{
   toast('🔴 İnternet bağlantın kesildi — girdiklerin kaybolmaz, bağlantı gelince otomatik gönderilir.');
 });
 window.addEventListener('load', ()=>{
+  applyTheme();
+  applyFontSize();
   girisGunlukEkle('Sayfa yüklendi. DEMO_MODE=' + DEMO_MODE);
   baglantiRozetiGuncelle();
   if(DEMO_MODE){
@@ -1654,6 +1690,8 @@ document.getElementById('modalBg').addEventListener('click', e=>{
 // ---------------------------------------------------------------------
 window.acGenelOdemeModal = acGenelOdemeModal;
 window.acYeniKayitModal = acYeniKayitModal;
+window.applyFontSize = applyFontSize;
+window.applyTheme = applyTheme;
 window.baglantiRozetiGuncelle = baglantiRozetiGuncelle;
 window.birimFiyatHesapla = birimFiyatHesapla;
 window.buildTabs = buildTabs;
@@ -1708,6 +1746,7 @@ window.musteriToplamBorc = musteriToplamBorc;
 window.musteriToplamOdenen = musteriToplamOdenen;
 window.odemeAlModal = odemeAlModal;
 window.odemeGecmisiModal = odemeGecmisiModal;
+window.openFontSizeModal = openFontSizeModal;
 window.otomatikGirisDurumGoster = otomatikGirisDurumGoster;
 window.persist = persist;
 window.portalLinkKopyala = portalLinkKopyala;
@@ -1742,6 +1781,7 @@ window.saveMusteri = saveMusteri;
 window.savePersonel = savePersonel;
 window.saveTur = saveTur;
 window.semaGuvenceyeAl = semaGuvenceyeAl;
+window.setFontSize = setFontSize;
 window.showModal = showModal;
 window.silKayit = silKayit;
 window.silMusteri = silMusteri;
@@ -1753,6 +1793,7 @@ window.toAuthEmail = toAuthEmail;
 window.toast = toast;
 window.todayISO = todayISO;
 window.toggleSablonAktif = toggleSablonAktif;
+window.toggleTheme = toggleTheme;
 window.topluMusteriEkleModal = topluMusteriEkleModal;
 window.tumPortalleriYenile = tumPortalleriYenile;
 window.turAdi = turAdi;
