@@ -15,9 +15,20 @@
   --oven:#2b1d14; --crust:#c97a3d; --wheat:#e2a765; --bg:#faf6f0; --card:#ffffff;
   --card-border:#ece3d6; --text:#2b1d14; --muted:#8a7d6d; --ok:#5c7a3f; --danger:#b5432f;
 }
+html[data-theme="dark"]{
+  --oven:#1a120c; --crust:#d68a4e; --wheat:#e2a765; --bg:#1c1712; --card:#2a221b;
+  --card-border:#3d332a; --text:#f0e6da; --muted:#a8998a; --ok:#7ba35a; --danger:#e0685a;
+}
+html[data-theme="dark"] input, html[data-theme="dark"] select, html[data-theme="dark"] textarea{
+  background:#241d17; color:var(--text); border-color:var(--card-border);
+}
+html[data-theme="dark"] .empty{color:var(--muted);}
 *{box-sizing:border-box;}
 html{overscroll-behavior-y:contain;}
 body{margin:0;font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);overscroll-behavior-y:contain;}
+body.fontKucuk{font-size:13px;}
+body.fontOrta{font-size:15px;}
+body.fontBuyuk{font-size:18px;}
 h1,h2,h3{font-family:'Fraunces',serif;margin:0 0 8px;}
 input,select{width:100%;padding:11px 12px;border:1.5px solid var(--card-border);border-radius:10px;font-size:15px;margin-bottom:12px;font-family:inherit;background:#fff;color:var(--text);}
 label{font-size:12.5px;font-weight:600;color:var(--crust);display:block;margin-bottom:4px;}
@@ -104,7 +115,9 @@ main{padding:16px;max-width:720px;margin:0 auto;}
       <h1>🍞 Veresiye Takip</h1>
       <div id="whoLabel" style="font-size:11.5px;color:rgba(255,255,255,0.6)">—</div>
     </div>
-    <div style="display:flex;gap:8px">
+    <div style="display:flex;gap:6px;overflow-x:auto;max-width:60vw;">
+      <button class="logout" onclick="openFontSizeModal()" title="Yazı Boyutu">Aa</button>
+      <button class="logout" onclick="toggleTheme()" title="Aydınlık/Karanlık mod" id="themeBtn">🌙</button>
       <button class="logout" onclick="verileriYenile()" title="Sayfayı yeniden yüklemeden en güncel veriyi çeker">🔄 Yenile</button>
       <button class="logout" onclick="doLogout()">Çıkış</button>
     </div>
