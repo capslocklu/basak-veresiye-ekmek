@@ -806,6 +806,7 @@ function musteriSatirlariniOlustur(){
       <td>${gorebilir ? '₺'+fmt(musteriBakiye(m.id)) : '<span style="color:var(--muted)">🔒 Gizli</span>'}</td>
       <td class="rowActions">
         ${gorebilir ? `<button class="iconbtn" onclick="musteriGecmisiModal('${m.id}')" title="Alışveriş geçmişi">📜</button>` : ''}
+        ${gorebilir && m.unHesabiAktif ? `<button class="iconbtn" onclick="ozelGirisModal('${m.id}')" title="Özel Giriş (un hesaplı)">⚡</button>` : ''}
         ${isPatron() ? `<button class="iconbtn" onclick="editMusteriModal('${m.id}')">✏️</button>
         <button class="iconbtn" onclick="whatsappGonderListeden('${m.id}')" title="WhatsApp'tan gönder">📱</button>
         <button class="iconbtn" onclick="silMusteri('${m.id}')">🗑️</button>` : ''}
@@ -818,6 +819,83 @@ function musteriSatirlariniOlustur(){
 // alışveriş ve ödeme geçmişini tek pencerede gösterir.
 // Bir müşterinin TÜM zamanlar alışveriş tutarını, seçtiği referans ürünün fiyatına bölerek
 // "eşdeğer adet"e çevirir, sonra belirlediği eşiğe bölerek kaç çuval un hak ettiğini hesaplar.
+// Un hesabı aktif olan müşteri için özel, canlı önizlemeli giriş ekranı — normal Günlük Giriş'ten
+// bağımsız çalışır, bu müşterinin TÜM ürünlerini gösterir (şablonla sınırlı değil) ve yazdıkça
+// "bu girişle un hesabı ne olur" önizlemesini anlık günceller.
+function ozelGirisModal(musteriId){
+  const m = DATA.musteriler.find(x=>x.id===musteriId);
+  if(!m) return;
+  window._ozelGirisAdetleri = {};
+  window._ozelGirisMusteriId = musteriId;
+  const urunSatirlari = DATA.ekmekTurleri.map(t=>{
+    const fiyat = birimFiyatHesapla(musteriId, t.id);
+    return `
+    <div style="margin-bottom:10px">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:3px">${t.ad} <span style="color:var(--muted)">(₺${fmt(fiyat)})</span></div>
+      <input type="number" min="0" inputmode="numeric" placeholder="—" class="ozelGirisAdet" data-tur="${t.id}" data-fiyat="${fiyat}"
+        oninput="ozelGirisOnizlemeGuncelle()" style="text-align:center;font-weight:600;">
+    </div>`;
+  }).join('');
+  showModal(`
+    <button class="modalClose" onclick="closeModal()">✕</button>
+    <h3>${m.ad} — Özel Giriş</h3>
+    <label>Tarih</label>
+    <input id="ozelGirisTarih" type="date" value="${todayISO()}" max="${todayISO()}">
+    <label style="display:flex;align-items:center;gap:6px;margin-top:6px">
+      <input type="checkbox" id="ozelGirisOdendi" style="width:auto;margin:0">
+      <span style="font-weight:500;color:var(--text)">Bugün Ödendi</span>
+    </label>
+    <div style="margin-top:14px">${urunSatirlari}</div>
+    <div id="ozelGirisOnizleme" style="margin-top:6px"></div>
+    <button class="btn btn-primary btn-block" style="margin-top:14px" onclick="ozelGirisKaydet()">✓ Kaydet</button>
+  `);
+  ozelGirisOnizlemeGuncelle();
+}
+function ozelGirisOnizlemeGuncelle(){
+  const musteriId = window._ozelGirisMusteriId;
+  const un = unHesabiHesapla(musteriId);
+  const kutu = document.getElementById('ozelGirisOnizleme');
+  if(!un || !kutu) { if(kutu) kutu.innerHTML=''; return; }
+  let ekTutar = 0;
+  document.querySelectorAll('.ozelGirisAdet').forEach(el=>{
+    const adet = Number(el.value)||0;
+    const fiyat = Number(el.dataset.fiyat)||0;
+    ekTutar += adet*fiyat;
+  });
+  const yeniToplamTutar = un.toplamTutar + ekTutar;
+  const yeniEsdegerAdet = yeniToplamTutar / un.referansUrun.fiyat;
+  const yeniCuval = Math.floor(yeniEsdegerAdet / un.esik);
+  const kazanilanCuval = yeniCuval - un.cuvalSayisi;
+  kutu.innerHTML = `
+    <div style="background:var(--wheat);color:#fff;border-radius:12px;padding:12px 16px">
+      <div style="font-size:11px;opacity:.9">BU GİRİŞLE UN HESABI ÖNİZLEMESİ</div>
+      <div style="font-size:18px;font-weight:700;margin:4px 0">
+        ${yeniCuval} çuval toplam ${kazanilanCuval>0 ? `<span style="font-size:13px">(+${kazanilanCuval} yeni!)</span>` : ''}
+      </div>
+      <div style="font-size:12px;opacity:.9">Yeni toplam: ₺${fmt(yeniToplamTutar)} → ${fmt(yeniEsdegerAdet)} eşdeğer ${un.referansUrun.ad}</div>
+    </div>
+  `;
+}
+function ozelGirisKaydet(){
+  const musteriId = window._ozelGirisMusteriId;
+  const m = DATA.musteriler.find(x=>x.id===musteriId);
+  const tarih = document.getElementById('ozelGirisTarih').value || todayISO();
+  const odendi = document.getElementById('ozelGirisOdendi').checked;
+  let eklenen = 0;
+  document.querySelectorAll('.ozelGirisAdet').forEach(el=>{
+    const adet = Number(el.value);
+    if(!adet || adet<=0) return;
+    const turId = el.dataset.tur;
+    DATA.kayitlar.push({
+      id:'k_'+Date.now()+'_'+turId, musteriId, turId, adet,
+      birimFiyat: Number(el.dataset.fiyat), tarih, odendi
+    });
+    eklenen++;
+  });
+  if(eklenen===0){ toast('Adet girilen satır yok.'); return; }
+  persist(); musteriPortalSenkronEt(musteriId);
+  closeModal(); toast(`${eklenen} satır kaydedildi ✓`); renderTab(activeTab);
+}
 function unHesabiHesapla(musteriId){
   const m = DATA.musteriler.find(x=>x.id===musteriId);
   if(!m || !m.unHesabiAktif || !m.unHesabiUrunId) return null;
@@ -1795,6 +1873,9 @@ window.odemeAlModal = odemeAlModal;
 window.odemeGecmisiModal = odemeGecmisiModal;
 window.openFontSizeModal = openFontSizeModal;
 window.otomatikGirisDurumGoster = otomatikGirisDurumGoster;
+window.ozelGirisKaydet = ozelGirisKaydet;
+window.ozelGirisModal = ozelGirisModal;
+window.ozelGirisOnizlemeGuncelle = ozelGirisOnizlemeGuncelle;
 window.persist = persist;
 window.portalLinkKopyala = portalLinkKopyala;
 window.portalWhatsappGonder = portalWhatsappGonder;
