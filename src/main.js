@@ -816,6 +816,20 @@ function musteriSatirlariniOlustur(){
 }
 // Müşteriler listesindeki 📜 ikonu — o müşterinin (tarih filtresi olmadan) TÜM ZAMANLAR
 // alışveriş ve ödeme geçmişini tek pencerede gösterir.
+// Bir müşterinin TÜM zamanlar alışveriş tutarını, seçtiği referans ürünün fiyatına bölerek
+// "eşdeğer adet"e çevirir, sonra belirlediği eşiğe bölerek kaç çuval un hak ettiğini hesaplar.
+function unHesabiHesapla(musteriId){
+  const m = DATA.musteriler.find(x=>x.id===musteriId);
+  if(!m || !m.unHesabiAktif || !m.unHesabiUrunId) return null;
+  const referansUrun = DATA.ekmekTurleri.find(t=>t.id===m.unHesabiUrunId);
+  if(!referansUrun || !referansUrun.fiyat) return null;
+  const toplamTutar = DATA.kayitlar.filter(k=>k.musteriId===musteriId).reduce((s,k)=>s+k.adet*k.birimFiyat,0);
+  const esdegerAdet = toplamTutar / referansUrun.fiyat;
+  const esik = m.unHesabiEsik || 200;
+  const cuvalSayisi = Math.floor(esdegerAdet / esik);
+  const kalanAdet = esdegerAdet - (cuvalSayisi*esik);
+  return {referansUrun, toplamTutar, esdegerAdet, esik, cuvalSayisi, kalanAdet};
+}
 function musteriGecmisiModal(musteriId){
   if(!musteriBakiyeGorulebilir(musteriId)){ toast('Bu müşteri için yetkin yok'); return; }
   const kayitlar = DATA.kayitlar.filter(k=>k.musteriId===musteriId).sort((a,b)=>a.tarih<b.tarih?1:-1);
@@ -835,9 +849,21 @@ function musteriGecmisiModal(musteriId){
   const odemeRows = odemeler.map(o=>`
     <tr><td>${o.tarih}</td><td>₺${fmt(o.tutar)}</td><td>${o.not||'—'}</td></tr>
   `).join('');
+  const un = unHesabiHesapla(musteriId);
+  const unHtml = un ? `
+    <div style="background:var(--wheat);color:#fff;border-radius:12px;padding:12px 16px;margin-bottom:14px">
+      <div style="font-size:11px;opacity:.9">UN HESABI (${un.referansUrun.ad} eşdeğeri, her ${un.esik} adette 1 çuval)</div>
+      <div style="font-size:20px;font-weight:700;margin:4px 0">${un.cuvalSayisi} çuval un hak ediyor</div>
+      <div style="font-size:12px;opacity:.9">
+        Toplam ₺${fmt(un.toplamTutar)} → ${fmt(un.esdegerAdet)} eşdeğer ${un.referansUrun.ad} ·
+        Sonraki çuvala ${fmt(un.esik - un.kalanAdet)} eşdeğer kaldı
+      </div>
+    </div>
+  ` : '';
   showModal(`
     <button class="modalClose" onclick="closeModal()">✕</button>
     <h3>${musteriAdi(musteriId)} — Alışveriş Geçmişi</h3>
+    ${unHtml}
     <p style="font-size:12.5px;color:var(--muted);margin:0 0 12px">
       Borç: ₺${fmt(musteriToplamBorc(musteriId))} · Ödenen: ₺${fmt(musteriToplamOdenen(musteriId))} ·
       Güncel Bakiye: ₺${fmt(musteriBakiye(musteriId))}
@@ -933,6 +959,24 @@ function editMusteriModal(id){
         ${id ? `<button type="button" class="btn btn-ghost" style="white-space:nowrap;padding:11px 12px;font-size:12px" onclick="gecmisFiyatDuzelt('${id}','${t.id}')" title="Bu fiyatı bu müşterinin bu üründeki TÜM geçmiş kayıtlarına da uygula">🔧 Geçmişe Uygula</button>` : ''}
       </div>
     `).join('')}
+    ` : ''}
+    ${DATA.ekmekTurleri.length ? `
+    <h3 style="margin-top:16px">Özel Un Hesabı (opsiyonel)</h3>
+    <p style="font-size:11.5px;color:var(--muted);margin:0 0 10px">
+      Bazı müşteriler farklı ürünleri karışık alıp toplam tutarları belli bir eşiği geçince un
+      hakkı kazanıyorsa (örn. her 200 Baston Ekmek eşdeğerinde 1 çuval un), burada aç. Aldığı
+      HER ürün (fiyatı ne olursa olsun) tutar üzerinden referans ürüne çevrilip toplanır.
+    </p>
+    <label style="display:flex;align-items:center;gap:6px;font-weight:400;color:var(--text)">
+      <input type="checkbox" id="mUnAktif" style="width:auto;margin:0" ${m.unHesabiAktif?'checked':''}>
+      Bu müşteride un hesabını uygula
+    </label>
+    <label style="margin-top:10px">Referans Ürün (eşdeğer hesabı bu ürünün fiyatına göre yapılır)</label>
+    <select id="mUnUrun">
+      ${DATA.ekmekTurleri.map(t=>`<option value="${t.id}" ${(m.unHesabiUrunId===t.id)?'selected':''}>${t.ad} (₺${fmt(t.fiyat)})</option>`).join('')}
+    </select>
+    <label>Kaç Eşdeğer Adette 1 Çuval Un</label>
+    <input id="mUnEsik" type="number" min="1" value="${m.unHesabiEsik||200}">
     ` : ''}
     ${id ? `
     <h3 style="margin-top:16px">Müşteri Portalı</h3>
@@ -1083,15 +1127,18 @@ function saveMusteri(id){
     const deger = el.value.trim();
     if(deger !== '') ozelFiyatlar[el.dataset.tur] = Number(deger);
   });
+  const unHesabiAktif = document.getElementById('mUnAktif') ? document.getElementById('mUnAktif').checked : false;
+  const unHesabiUrunId = document.getElementById('mUnUrun') ? document.getElementById('mUnUrun').value : null;
+  const unHesabiEsik = document.getElementById('mUnEsik') ? Number(document.getElementById('mUnEsik').value)||200 : 200;
   if(!ad){ toast('Müşteri adı gerekli'); return; }
   let musteriId = id;
   if(id){
     const m = DATA.musteriler.find(x=>x.id===id);
     if(!m.erisimKodu) m.erisimKodu = rastgeleErisimKodu();
-    Object.assign(m, {ad, adSoyad, cinsiyet, telefon, acilisBakiyesi, portalSifre, ozelFiyatlar});
+    Object.assign(m, {ad, adSoyad, cinsiyet, telefon, acilisBakiyesi, portalSifre, ozelFiyatlar, unHesabiAktif, unHesabiUrunId, unHesabiEsik});
   } else {
     musteriId = 'm_'+Date.now();
-    DATA.musteriler.push({id:musteriId, ad, adSoyad, cinsiyet, telefon, acilisBakiyesi, portalSifre:'', erisimKodu:rastgeleErisimKodu(), ozelFiyatlar});
+    DATA.musteriler.push({id:musteriId, ad, adSoyad, cinsiyet, telefon, acilisBakiyesi, portalSifre:'', erisimKodu:rastgeleErisimKodu(), ozelFiyatlar, unHesabiAktif, unHesabiUrunId, unHesabiEsik});
   }
   persist(); musteriPortalSenkronEt(musteriId); closeModal(); toast('Kaydedildi ✓'); renderTab(activeTab);
 }
@@ -1797,6 +1844,7 @@ window.toggleTheme = toggleTheme;
 window.topluMusteriEkleModal = topluMusteriEkleModal;
 window.tumPortalleriYenile = tumPortalleriYenile;
 window.turAdi = turAdi;
+window.unHesabiHesapla = unHesabiHesapla;
 window.verileriYenile = verileriYenile;
 window.whatsappGonderListeden = whatsappGonderListeden;
 window.whatsappMesajiAc = whatsappMesajiAc;
