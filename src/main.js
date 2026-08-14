@@ -385,7 +385,7 @@ const TABS = [
   {id:'ozet', label:'📊 Özet'},
   {id:'gunlukgiris', label:'📝 Günlük Giriş'},
   {id:'sablon', label:'🗂️ Giriş Şablonu'},
-  {id:'kayitlar', label:'📒 Kayıtlar', patronOnly:true},
+  {id:'kayitlar', label:'📒 Kayıtlar'},
   {id:'borclar', label:'💳 Borçlar'},
   {id:'musteriler', label:'👥 Müşteriler'},
   {id:'turler', label:'🍞 Ekmek Türleri'},
@@ -398,7 +398,7 @@ function buildTabs(){
   nav.innerHTML = gorunecekler.map(t=>`<button data-tab="${t.id}" onclick="renderTab('${t.id}')">${t.label}</button>`).join('');
 }
 function renderTab(id){
-  if((id==='personel' || id==='kayitlar') && !isPatron()) id = 'ozet'; // güvenlik: personel bu sekmelere giremesin
+  if(id==='personel' && !isPatron()) id = 'ozet'; // güvenlik: personel bu sekmeye giremesin
   activeTab = id;
   document.querySelectorAll('#tabsNav button').forEach(b=>b.classList.toggle('active', b.dataset.tab===id));
   const main = document.getElementById('mainContent');
@@ -519,12 +519,18 @@ function kayitlarAltSekmeDegistir(sekme){
   renderTab('kayitlar');
 }
 function renderKayitlarTab(main){
+  // Personel için dönem seçimini sadece Bugün/Dün ile sınırlıyoruz — eğer daha önce (patronken
+  // ya da varsayılan olarak) geniş bir dönem seçiliyse, personel bu sekmeye girdiğinde otomatik
+  // "Bugün"e döner.
+  if(!isPatron() && kayitlarDonemTipi!=='bugun' && kayitlarDonemTipi!=='dun'){
+    kayitlarDonemTipi = 'bugun';
+  }
   const {bas, bit} = donemTarihAraligiHesapla(kayitlarDonemTipi, kayitlarBaslangic, kayitlarBitis);
   const kayitlar = [...DATA.kayitlar].filter(k=>k.tarih>=bas && k.tarih<=bit).sort((a,b)=>a.tarih<b.tarih?1:-1);
   const odemeler = [...DATA.odemeler].filter(o=>o.tarih>=bas && o.tarih<=bit).sort((a,b)=>a.tarih<b.tarih?1:-1);
   main.innerHTML = `
     <div class="card">
-      ${donemSecimHtml('kayitlar', kayitlarDonemTipi, kayitlarBaslangic, kayitlarBitis, 'kayitlarDonemDegisti')}
+      ${donemSecimHtml('kayitlar', kayitlarDonemTipi, kayitlarBaslangic, kayitlarBitis, 'kayitlarDonemDegisti', !isPatron())}
       <div style="display:flex;gap:8px;margin:14px 0">
         <button class="btn ${kayitlarAltSekme==='teslimat'?'btn-primary':'btn-ghost'}" style="flex:1" onclick="kayitlarAltSekmeDegistir('teslimat')">📦 Teslimatlar</button>
         <button class="btn ${kayitlarAltSekme==='odeme'?'btn-primary':'btn-ghost'}" style="flex:1" onclick="kayitlarAltSekmeDegistir('odeme')">💳 Ödemeler</button>
@@ -1148,10 +1154,8 @@ function donemTarihAraligiHesapla(tip, ozelBas, ozelBit){
   }
   return {bas, bit};
 }
-function donemSecimHtml(idPrefix, aktifTip, ozelBas, ozelBit, onDegisti){
-  return `
-    <label>Dönem</label>
-    <select id="${idPrefix}DonemSecim" onchange="${onDegisti}(this.value)">
+function donemSecimHtml(idPrefix, aktifTip, ozelBas, ozelBit, onDegisti, sadeceBugunDun){
+  const tumOptions = `
       <option value="tumu" ${aktifTip==='tumu'?'selected':''}>Tümü</option>
       <option value="bugun" ${aktifTip==='bugun'?'selected':''}>Bugün</option>
       <option value="dun" ${aktifTip==='dun'?'selected':''}>Dün</option>
@@ -1159,8 +1163,17 @@ function donemSecimHtml(idPrefix, aktifTip, ozelBas, ozelBit, onDegisti){
       <option value="bu_ay" ${aktifTip==='bu_ay'?'selected':''}>Bu Ay</option>
       <option value="gecen_ay" ${aktifTip==='gecen_ay'?'selected':''}>Geçen Ay</option>
       <option value="ozel" ${aktifTip==='ozel'?'selected':''}>Özel Tarih Aralığı</option>
+  `;
+  const kisitliOptions = `
+      <option value="bugun" ${aktifTip==='bugun'?'selected':''}>Bugün</option>
+      <option value="dun" ${aktifTip==='dun'?'selected':''}>Dün</option>
+  `;
+  return `
+    <label>Dönem</label>
+    <select id="${idPrefix}DonemSecim" onchange="${onDegisti}(this.value)">
+      ${sadeceBugunDun ? kisitliOptions : tumOptions}
     </select>
-    ${aktifTip==='ozel' ? `
+    ${aktifTip==='ozel' && !sadeceBugunDun ? `
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div><label>Başlangıç</label><input id="${idPrefix}Bas" type="date" value="${ozelBas||todayISO()}" onchange="${idPrefix}OzelTarihGuncelle()"></div>
         <div><label>Bitiş</label><input id="${idPrefix}Bit" type="date" value="${ozelBit||todayISO()}" onchange="${idPrefix}OzelTarihGuncelle()"></div>
@@ -1488,20 +1501,20 @@ function renderGunlukGirisTab(main){
       if(!t) return '';
       const deger = window.girisAdetleri[s.id];
       return `
-      <div style="margin-bottom:6px">
-        <div style="font-size:9px;color:var(--muted);margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t.ad}</div>
+      <div style="margin-bottom:8px">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:3px">${t.ad}</div>
         <input type="number" min="0" inputmode="numeric" placeholder="—" value="${deger===undefined||deger===''?'':deger}"
           oninput="window.girisAdetleri['${s.id}']=this.value===''?'':Number(this.value)"
-          style="margin-bottom:0;padding:6px 4px;text-align:center;font-weight:600;font-size:12px;">
+          style="margin-bottom:0;padding:9px 8px;text-align:center;font-weight:600;">
       </div>`;
     }).join('');
     return `
-    <div class="card" style="margin-bottom:0;padding:8px">
-      <div style="margin-bottom:6px">
-        <b style="font-size:11.5px;line-height:1.2;display:block">${m.ad}</b>
-        <label style="font-size:9.5px;font-weight:500;display:flex;align-items:center;gap:3px;white-space:nowrap;color:var(--text);margin-top:3px">
-          <input type="checkbox" style="width:12px;height:12px;margin:0" ${odendi?'checked':''} onchange="window.girisOdendi['${g.musteriId}']=this.checked">
-          Ödendi
+    <div class="card" style="margin-bottom:0;padding:14px">
+      <div style="margin-bottom:8px">
+        <b style="font-size:14px">${m.ad}</b>
+        <label style="font-size:11px;font-weight:500;display:flex;align-items:center;gap:4px;white-space:nowrap;color:var(--text);margin-top:4px">
+          <input type="checkbox" style="width:auto;margin:0" ${odendi?'checked':''} onchange="window.girisOdendi['${g.musteriId}']=this.checked">
+          Bugün Ödendi
         </label>
       </div>
       ${hucreler}
@@ -1514,7 +1527,7 @@ function renderGunlukGirisTab(main){
       <input type="date" value="${girisTarih}" max="${todayISO()}" onchange="degistirGunlukGirisTarihi(this.value)">
       ${gecmisMi ? `<p style="font-size:11.5px;color:var(--crust);margin:0">📅 Geçmiş bir tarih için giriş yapıyorsun.</p>` : ''}
     </div>
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:14px">${gruplarHtml}</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">${gruplarHtml}</div>
     <div style="height:70px"></div>
     <div style="position:fixed;left:0;right:0;bottom:0;padding:12px 90px 12px 16px;padding-bottom:calc(12px + env(safe-area-inset-bottom));background:linear-gradient(to top, var(--bg) 60%, transparent);z-index:40;">
       <button class="btn btn-primary btn-block" style="box-shadow:0 -4px 14px rgba(0,0,0,0.12)" onclick="gunlukGirisKaydet()">✓ Tümünü Kaydet</button>
