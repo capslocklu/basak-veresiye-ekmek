@@ -187,7 +187,7 @@ function musteriAramaHtml(inputId, hiddenId, dropdownId, placeholder, callbackFn
         oninput="musteriAramaFiltrele('${inputId}','${dropdownId}','${hiddenId}','${callbackFn||''}')"
         onfocus="musteriAramaFiltrele('${inputId}','${dropdownId}','${hiddenId}','${callbackFn||''}')">
       <input type="hidden" id="${hiddenId}" value="">
-      <div id="${dropdownId}" style="display:none;position:absolute;top:calc(100% - 10px);left:0;right:0;background:#fff;border:1.5px solid var(--card-border);border-radius:10px;max-height:220px;overflow-y:auto;z-index:20;box-shadow:0 6px 18px rgba(0,0,0,0.15);"></div>
+      <div id="${dropdownId}" style="display:none;position:absolute;top:calc(100% - 10px);left:0;right:0;background:var(--card);border:1.5px solid var(--card-border);border-radius:10px;max-height:220px;overflow-y:auto;z-index:20;box-shadow:0 6px 18px rgba(0,0,0,0.15);"></div>
     </div>`;
 }
 function musteriAramaFiltrele(inputId, dropdownId, hiddenId, callbackFn){
