@@ -420,6 +420,7 @@ let activeTab = 'ozet';
 const TABS = [
   {id:'ozet', label:'📊 Özet'},
   {id:'gunlukgiris', label:'📝 Günlük Giriş'},
+  {id:'ungiris', label:'🌾 Un Hesaplı Giriş'},
   {id:'sablon', label:'🗂️ Giriş Şablonu'},
   {id:'kayitlar', label:'📒 Kayıtlar'},
   {id:'borclar', label:'💳 Borçlar'},
@@ -441,6 +442,7 @@ function renderTab(id){
   const renderers = {
     ozet: renderOzetTab,
     gunlukgiris: renderGunlukGirisTab,
+    ungiris: renderUnHesapliGirisTab,
     sablon: renderSablonTab,
     kayitlar: renderKayitlarTab,
     borclar: renderBorclarTab,
@@ -806,7 +808,6 @@ function musteriSatirlariniOlustur(){
       <td>${gorebilir ? '₺'+fmt(musteriBakiye(m.id)) : '<span style="color:var(--muted)">🔒 Gizli</span>'}</td>
       <td class="rowActions">
         ${gorebilir ? `<button class="iconbtn" onclick="musteriGecmisiModal('${m.id}')" title="Alışveriş geçmişi">📜</button>` : ''}
-        ${gorebilir && m.unHesabiAktif ? `<button class="iconbtn" onclick="ozelGirisModal('${m.id}')" title="Özel Giriş (un hesaplı)">⚡</button>` : ''}
         ${isPatron() ? `<button class="iconbtn" onclick="editMusteriModal('${m.id}')">✏️</button>
         <button class="iconbtn" onclick="whatsappGonderListeden('${m.id}')" title="WhatsApp'tan gönder">📱</button>
         <button class="iconbtn" onclick="silMusteri('${m.id}')">🗑️</button>` : ''}
@@ -819,45 +820,81 @@ function musteriSatirlariniOlustur(){
 // alışveriş ve ödeme geçmişini tek pencerede gösterir.
 // Bir müşterinin TÜM zamanlar alışveriş tutarını, seçtiği referans ürünün fiyatına bölerek
 // "eşdeğer adet"e çevirir, sonra belirlediği eşiğe bölerek kaç çuval un hak ettiğini hesaplar.
-// Un hesabı aktif olan müşteri için özel, canlı önizlemeli giriş ekranı — normal Günlük Giriş'ten
-// bağımsız çalışır, bu müşterinin TÜM ürünlerini gösterir (şablonla sınırlı değil) ve yazdıkça
-// "bu girişle un hesabı ne olur" önizlemesini anlık günceller.
-function ozelGirisModal(musteriId){
-  const m = DATA.musteriler.find(x=>x.id===musteriId);
-  if(!m) return;
-  window._ozelGirisAdetleri = {};
-  window._ozelGirisMusteriId = musteriId;
-  const urunSatirlari = DATA.ekmekTurleri.map(t=>{
-    const fiyat = birimFiyatHesapla(musteriId, t.id);
+/* ---------------- UN HESAPLI GİRİŞ (un hesabı açık TÜM müşteriler bir arada) ---------------- */
+let unGirisTarih = todayISO();
+window.unGirisAdetleri = {}; // {"musteriId_turId": adet} — normal Günlük Giriş'in state'inden ayrı tutuluyor
+window.unGirisOdendi = {};   // {musteriId: true|false}
+function unGirisTarihDegistir(val){
+  unGirisTarih = val || todayISO();
+  window.unGirisAdetleri = {};
+  window.unGirisOdendi = {};
+  renderTab('ungiris');
+}
+function renderUnHesapliGirisTab(main){
+  const unMusteriler = DATA.musteriler.filter(m=>m.unHesabiAktif && musteriBakiyeGorulebilir(m.id));
+  if(!unMusteriler.length){
+    main.innerHTML = `
+      <div class="card">
+        <div class="empty">Henüz un hesabı açık bir müşteri yok.</div>
+        <p style="font-size:12px;color:var(--muted);text-align:center;margin-top:8px">
+          Müşteriler sekmesinden bir müşteriyi düzenleyip "Özel Un Hesabı"nı aç.
+        </p>
+        <button class="btn btn-primary btn-block" style="margin-top:12px" onclick="renderTab('musteriler')">👥 Müşterilere Git</button>
+      </div>`;
+    return;
+  }
+  const kartlar = unMusteriler.map(m=>{
+    const odendi = window.unGirisOdendi[m.id]===undefined ? false : window.unGirisOdendi[m.id];
+    const urunSatirlari = DATA.ekmekTurleri.map(t=>{
+      const fiyat = birimFiyatHesapla(m.id, t.id);
+      const key = m.id+'_'+t.id;
+      const deger = window.unGirisAdetleri[key];
+      return `
+      <div style="margin-bottom:8px">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:2px">${t.ad} <span style="color:var(--muted)">(₺${fmt(fiyat)})</span></div>
+        <input type="number" min="0" inputmode="numeric" placeholder="—" value="${deger===undefined||deger===''?'':deger}"
+          class="unGirisAdet" data-musteri="${m.id}" data-tur="${t.id}" data-fiyat="${fiyat}"
+          oninput="window.unGirisAdetleri['${key}']=this.value===''?'':Number(this.value); unGirisOnizlemeGuncelle('${m.id}')"
+          style="text-align:center;font-weight:600;">
+      </div>`;
+    }).join('');
     return `
-    <div style="margin-bottom:10px">
-      <div style="font-size:12px;color:var(--muted);margin-bottom:3px">${t.ad} <span style="color:var(--muted)">(₺${fmt(fiyat)})</span></div>
-      <input type="number" min="0" inputmode="numeric" placeholder="—" class="ozelGirisAdet" data-tur="${t.id}" data-fiyat="${fiyat}"
-        oninput="ozelGirisOnizlemeGuncelle()" style="text-align:center;font-weight:600;">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px">
+        <b>${m.ad}</b>
+        <label style="font-size:11.5px;font-weight:500;display:flex;align-items:center;gap:4px;white-space:nowrap;color:var(--text)">
+          <input type="checkbox" style="width:auto;margin:0" ${odendi?'checked':''} onchange="window.unGirisOdendi['${m.id}']=this.checked">
+          Bugün Ödendi
+        </label>
+      </div>
+      ${urunSatirlari}
+      <div id="unOnizleme_${m.id}" style="margin-top:6px"></div>
     </div>`;
   }).join('');
-  showModal(`
-    <button class="modalClose" onclick="closeModal()">✕</button>
-    <h3>${m.ad} — Özel Giriş</h3>
-    <label>Tarih</label>
-    <input id="ozelGirisTarih" type="date" value="${todayISO()}" max="${todayISO()}">
-    <label style="display:flex;align-items:center;gap:6px;margin-top:6px">
-      <input type="checkbox" id="ozelGirisOdendi" style="width:auto;margin:0">
-      <span style="font-weight:500;color:var(--text)">Bugün Ödendi</span>
-    </label>
-    <div style="margin-top:14px">${urunSatirlari}</div>
-    <div id="ozelGirisOnizleme" style="margin-top:6px"></div>
-    <button class="btn btn-primary btn-block" style="margin-top:14px" onclick="ozelGirisKaydet()">✓ Kaydet</button>
-  `);
-  ozelGirisOnizlemeGuncelle();
+  main.innerHTML = `
+    <div class="card">
+      <h2>🌾 Un Hesaplı Giriş</h2>
+      <p style="font-size:11.5px;color:var(--muted);margin:0 0 10px">
+        Un hesabı açık müşteriler burada bir arada — adet girdikçe her kartın altında canlı un
+        hesabı önizlemesi güncellenir.
+      </p>
+      <label>Tarih</label>
+      <input type="date" value="${unGirisTarih}" max="${todayISO()}" onchange="unGirisTarihDegistir(this.value)">
+    </div>
+    ${kartlar}
+    <div style="height:70px"></div>
+    <div style="position:fixed;left:0;right:0;bottom:0;padding:12px 90px 12px 16px;padding-bottom:calc(12px + env(safe-area-inset-bottom));background:linear-gradient(to top, var(--bg) 60%, transparent);z-index:40;">
+      <button class="btn btn-primary btn-block" style="box-shadow:0 -4px 14px rgba(0,0,0,0.12)" onclick="unGirisKaydet()">✓ Tümünü Kaydet</button>
+    </div>
+  `;
+  unMusteriler.forEach(m=>unGirisOnizlemeGuncelle(m.id));
 }
-function ozelGirisOnizlemeGuncelle(){
-  const musteriId = window._ozelGirisMusteriId;
+function unGirisOnizlemeGuncelle(musteriId){
   const un = unHesabiHesapla(musteriId);
-  const kutu = document.getElementById('ozelGirisOnizleme');
+  const kutu = document.getElementById('unOnizleme_'+musteriId);
   if(!un || !kutu) { if(kutu) kutu.innerHTML=''; return; }
   let ekTutar = 0;
-  document.querySelectorAll('.ozelGirisAdet').forEach(el=>{
+  document.querySelectorAll(`.unGirisAdet[data-musteri="${musteriId}"]`).forEach(el=>{
     const adet = Number(el.value)||0;
     const fiyat = Number(el.dataset.fiyat)||0;
     ekTutar += adet*fiyat;
@@ -867,34 +904,37 @@ function ozelGirisOnizlemeGuncelle(){
   const yeniCuval = Math.floor(yeniEsdegerAdet / un.esik);
   const kazanilanCuval = yeniCuval - un.cuvalSayisi;
   kutu.innerHTML = `
-    <div style="background:var(--wheat);color:#fff;border-radius:12px;padding:12px 16px">
-      <div style="font-size:11px;opacity:.9">BU GİRİŞLE UN HESABI ÖNİZLEMESİ</div>
-      <div style="font-size:18px;font-weight:700;margin:4px 0">
-        ${yeniCuval} çuval toplam ${kazanilanCuval>0 ? `<span style="font-size:13px">(+${kazanilanCuval} yeni!)</span>` : ''}
+    <div style="background:var(--wheat);color:#fff;border-radius:10px;padding:10px 14px;">
+      <div style="font-size:10.5px;opacity:.9">UN HESABI ÖNİZLEMESİ</div>
+      <div style="font-size:16px;font-weight:700;margin:2px 0">
+        ${yeniCuval} çuval ${kazanilanCuval>0 ? `<span style="font-size:12px">(+${kazanilanCuval} yeni!)</span>` : ''}
       </div>
-      <div style="font-size:12px;opacity:.9">Yeni toplam: ₺${fmt(yeniToplamTutar)} → ${fmt(yeniEsdegerAdet)} eşdeğer ${un.referansUrun.ad}</div>
+      <div style="font-size:11px;opacity:.9">₺${fmt(yeniToplamTutar)} → ${fmt(yeniEsdegerAdet)} eşdeğer ${un.referansUrun.ad}</div>
     </div>
   `;
 }
-function ozelGirisKaydet(){
-  const musteriId = window._ozelGirisMusteriId;
-  const m = DATA.musteriler.find(x=>x.id===musteriId);
-  const tarih = document.getElementById('ozelGirisTarih').value || todayISO();
-  const odendi = document.getElementById('ozelGirisOdendi').checked;
+function unGirisKaydet(){
   let eklenen = 0;
-  document.querySelectorAll('.ozelGirisAdet').forEach(el=>{
+  const musteriIdleri = new Set();
+  document.querySelectorAll('.unGirisAdet').forEach(el=>{
     const adet = Number(el.value);
     if(!adet || adet<=0) return;
+    const musteriId = el.dataset.musteri;
     const turId = el.dataset.tur;
+    const odendi = window.unGirisOdendi[musteriId]===undefined ? false : window.unGirisOdendi[musteriId];
     DATA.kayitlar.push({
-      id:'k_'+Date.now()+'_'+turId, musteriId, turId, adet,
-      birimFiyat: Number(el.dataset.fiyat), tarih, odendi
+      id:'k_'+Date.now()+'_'+musteriId+'_'+turId, musteriId, turId, adet,
+      birimFiyat: Number(el.dataset.fiyat), tarih: unGirisTarih, odendi
     });
+    musteriIdleri.add(musteriId);
     eklenen++;
+    window.unGirisAdetleri[musteriId+'_'+turId] = '';
   });
   if(eklenen===0){ toast('Adet girilen satır yok.'); return; }
-  persist(); musteriPortalSenkronEt(musteriId);
-  closeModal(); toast(`${eklenen} satır kaydedildi ✓`); renderTab(activeTab);
+  persist();
+  musteriIdleri.forEach(id=>musteriPortalSenkronEt(id));
+  toast(`${eklenen} satır kaydedildi ✓`);
+  renderTab('ungiris');
 }
 function unHesabiHesapla(musteriId){
   const m = DATA.musteriler.find(x=>x.id===musteriId);
@@ -1873,9 +1913,6 @@ window.odemeAlModal = odemeAlModal;
 window.odemeGecmisiModal = odemeGecmisiModal;
 window.openFontSizeModal = openFontSizeModal;
 window.otomatikGirisDurumGoster = otomatikGirisDurumGoster;
-window.ozelGirisKaydet = ozelGirisKaydet;
-window.ozelGirisModal = ozelGirisModal;
-window.ozelGirisOnizlemeGuncelle = ozelGirisOnizlemeGuncelle;
 window.persist = persist;
 window.portalLinkKopyala = portalLinkKopyala;
 window.portalWhatsappGonder = portalWhatsappGonder;
@@ -1900,6 +1937,7 @@ window.renderRaporlarTab = renderRaporlarTab;
 window.renderSablonTab = renderSablonTab;
 window.renderTab = renderTab;
 window.renderTurlerTab = renderTurlerTab;
+window.renderUnHesapliGirisTab = renderUnHesapliGirisTab;
 window.sablonAsagi = sablonAsagi;
 window.sablonSatiriEkle = sablonSatiriEkle;
 window.sablonYukari = sablonYukari;
@@ -1925,6 +1963,9 @@ window.toggleTheme = toggleTheme;
 window.topluMusteriEkleModal = topluMusteriEkleModal;
 window.tumPortalleriYenile = tumPortalleriYenile;
 window.turAdi = turAdi;
+window.unGirisKaydet = unGirisKaydet;
+window.unGirisOnizlemeGuncelle = unGirisOnizlemeGuncelle;
+window.unGirisTarihDegistir = unGirisTarihDegistir;
 window.unHesabiHesapla = unHesabiHesapla;
 window.verileriYenile = verileriYenile;
 window.whatsappGonderListeden = whatsappGonderListeden;
