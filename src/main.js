@@ -127,6 +127,23 @@ function canliSenkronuBaslat(){
 
 /* ---------------- YARDIMCI FONKSİYONLAR ---------------- */
 function fmt(n){ return Number(n||0).toLocaleString('tr-TR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+// Türkçe Excel'de düzgün açılsın diye noktalı virgül (;) ayraç ve UTF-8 BOM kullanıyoruz.
+function csvIndir(dosyaAdi, basliklar, satirlar){
+  const kacis = (v)=>{
+    const s = String(v==null?'':v);
+    return /[;"\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
+  };
+  const icerik = [basliklar.map(kacis).join(';')]
+    .concat(satirlar.map(r=>r.map(kacis).join(';')))
+    .join('\n');
+  const blob = new Blob(['\uFEFF'+icerik], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = dosyaAdi;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast('CSV indirildi ✓');
+}
 // ÖNEMLİ: JavaScript'in Date().toISOString()'ı her zaman UTC (İngiltere saati) döndürür.
 // Türkiye UTC+3 olduğu için, gece yarısından sonraki ilk birkaç saatte bu doğrudan kullanılırsa
 // "bugün" yanlış (bir gün geriden) hesaplanır — "Dün", "Bu Ay" gibi tüm filtreler kayardı.
@@ -574,14 +591,32 @@ function renderKayitlarTab(main){
         <button class="btn ${kayitlarAltSekme==='odeme'?'btn-primary':'btn-ghost'}" style="flex:1" onclick="kayitlarAltSekmeDegistir('odeme')">💳 Ödemeler</button>
       </div>
       ${kayitlarAltSekme==='teslimat' ? `
-        <button class="btn btn-primary" style="margin-bottom:14px" onclick="acYeniKayitModal()">➕ Yeni Kayıt</button>
+        <div style="display:flex;gap:8px;margin-bottom:14px">
+          <button class="btn btn-primary" style="flex:1" onclick="acYeniKayitModal()">➕ Yeni Kayıt</button>
+          <button class="btn btn-ghost" onclick="kayitlarCsvIndir()" title="Bu dönemi CSV indir">📊</button>
+        </div>
         ${renderKayitTablosu(kayitlar)}
       ` : `
-        <button class="btn btn-primary" style="margin-bottom:14px" onclick="acGenelOdemeModal()">💳 Ödeme Al</button>
+        <div style="display:flex;gap:8px;margin-bottom:14px">
+          <button class="btn btn-primary" style="flex:1" onclick="acGenelOdemeModal()">💳 Ödeme Al</button>
+          <button class="btn btn-ghost" onclick="odemelerCsvIndir()" title="Bu dönemi CSV indir">📊</button>
+        </div>
         ${renderOdemeTablosu(odemeler)}
       `}
     </div>
   `;
+}
+function kayitlarCsvIndir(){
+  const {bas, bit} = donemTarihAraligiHesapla(kayitlarDonemTipi, kayitlarBaslangic, kayitlarBitis);
+  const kayitlar = [...DATA.kayitlar].filter(k=>k.tarih>=bas && k.tarih<=bit).sort((a,b)=>a.tarih<b.tarih?1:-1);
+  const satirlar = kayitlar.map(k=>[k.tarih, musteriAdi(k.musteriId), turAdi(k.turId), k.adet, fmt(k.birimFiyat), fmt(k.adet*k.birimFiyat), k.odendi?'Peşin':'Veresiye']);
+  csvIndir(`teslimatlar_${bas}_${bit}.csv`, ['Tarih','Müşteri','Ürün','Adet','Birim Fiyat (₺)','Tutar (₺)','Durum'], satirlar);
+}
+function odemelerCsvIndir(){
+  const {bas, bit} = donemTarihAraligiHesapla(kayitlarDonemTipi, kayitlarBaslangic, kayitlarBitis);
+  const odemeler = [...DATA.odemeler].filter(o=>o.tarih>=bas && o.tarih<=bit).sort((a,b)=>a.tarih<b.tarih?1:-1);
+  const satirlar = odemeler.map(o=>[o.tarih, musteriAdi(o.musteriId), fmt(o.tutar), o.not||'']);
+  csvIndir(`odemeler_${bas}_${bit}.csv`, ['Tarih','Müşteri','Tutar (₺)','Not'], satirlar);
 }
 function renderOdemeTablosu(list){
   if(!list.length) return `<div class="empty">Henüz ödeme kaydı yok.</div>`;
@@ -1493,6 +1528,7 @@ function renderRaporSonuclari(){
         </div>
       </div>
       <button class="btn btn-primary btn-block" onclick="window.print()">🖨️ Yazdır / PDF Olarak Kaydet</button>
+      <button class="btn btn-ghost btn-block" style="margin-top:8px" onclick="musteriDetayCsvIndir('${raporSeciliMusteri}')">📊 CSV Olarak İndir</button>
     `;
     return;
   }
@@ -1523,6 +1559,7 @@ function renderRaporSonuclari(){
         </div>
       </div>
       <button class="btn btn-primary btn-block" onclick="window.print()">🖨️ Yazdır / PDF Olarak Kaydet</button>
+      <button class="btn btn-ghost btn-block" style="margin-top:8px" onclick="urunDetayCsvIndir('${raporSeciliUrun}')">📊 CSV Olarak İndir</button>
     `;
     return;
   }
@@ -1569,6 +1606,7 @@ function renderRaporSonuclari(){
       <div class="stat"><div class="n">${toplamAdet}</div><div class="l">Toplam Adet</div></div>
       <div class="stat"><div class="n">₺${fmt(toplamTahsilat)}</div><div class="l">Tahsilat</div></div>
     </div>
+    <button class="btn btn-ghost btn-block" style="margin-bottom:14px" onclick="raporCsvIndir()">📊 Bu Dönemi CSV Olarak İndir</button>
     <div class="card">
       <h2>Müşteri Bazlı <span style="font-size:11px;color:var(--muted);font-weight:400">(detay için dokun)</span></h2>
       <table><thead><tr><th>Müşteri</th><th>Adet</th><th>Tutar</th></tr></thead>
@@ -1580,6 +1618,51 @@ function renderRaporSonuclari(){
       <tbody>${turRows || `<tr><td colspan="3"><div class="empty">Bu dönemde kayıt yok.</div></td></tr>`}</tbody></table>
     </div>
   `;
+}
+// Raporlar genel özetteki dönem için, hem müşteri bazlı hem ürün bazlı tabloları TEK CSV
+// dosyasına yazar — hangi dönem seçiliyse (Bu Hafta, Bu Ay, Geçen Ay, Özel...) onu indirir.
+function musteriDetayCsvIndir(musteriId){
+  const {bas, bit} = raporTarihAraligiHesapla();
+  const satirlar = DATA.kayitlar.filter(k=>k.musteriId===musteriId && k.tarih>=bas && k.tarih<=bit).sort((a,b)=>a.tarih<b.tarih?-1:1);
+  const satirData = satirlar.map(k=>[k.tarih, turAdi(k.turId), k.adet, fmt(k.birimFiyat), fmt(k.adet*k.birimFiyat)]);
+  csvIndir(`${musteriAdi(musteriId)}_${bas}_${bit}.csv`, ['Tarih','Ürün','Adet','Birim Fiyat (₺)','Tutar (₺)'], satirData);
+}
+function urunDetayCsvIndir(turId){
+  const {bas, bit} = raporTarihAraligiHesapla();
+  const satirlar = DATA.kayitlar.filter(k=>k.turId===turId && k.tarih>=bas && k.tarih<=bit && musteriBakiyeGorulebilir(k.musteriId)).sort((a,b)=>a.tarih<b.tarih?-1:1);
+  const satirData = satirlar.map(k=>[k.tarih, musteriAdi(k.musteriId), k.adet, fmt(k.birimFiyat), fmt(k.adet*k.birimFiyat)]);
+  csvIndir(`${turAdi(turId)}_${bas}_${bit}.csv`, ['Tarih','Müşteri','Adet','Birim Fiyat (₺)','Tutar (₺)'], satirData);
+}
+function raporCsvIndir(){
+  const {bas, bit} = raporTarihAraligiHesapla();
+  const kayitlar = DATA.kayitlar.filter(k=>k.tarih>=bas && k.tarih<=bit);
+  const musteriToplam = {};
+  kayitlar.forEach(k=>{
+    if(!musteriBakiyeGorulebilir(k.musteriId)) return;
+    if(!musteriToplam[k.musteriId]) musteriToplam[k.musteriId] = {adet:0, tutar:0};
+    musteriToplam[k.musteriId].adet += k.adet;
+    musteriToplam[k.musteriId].tutar += k.adet*k.birimFiyat;
+  });
+  const turToplam = {};
+  kayitlar.forEach(k=>{
+    if(!turToplam[k.turId]) turToplam[k.turId] = {adet:0, tutar:0};
+    turToplam[k.turId].adet += k.adet;
+    turToplam[k.turId].tutar += k.adet*k.birimFiyat;
+  });
+  const satirlar = [
+    ['DÖNEM', bas + ' — ' + bit, ''],
+    ['', '', ''],
+    ['MÜŞTERİ BAZLI', '', ''],
+  ];
+  Object.entries(musteriToplam).sort((a,b)=>b[1].tutar-a[1].tutar).forEach(([mid,v])=>{
+    satirlar.push([musteriAdi(mid), v.adet, fmt(v.tutar)]);
+  });
+  satirlar.push(['', '', '']);
+  satirlar.push(['ÜRÜN BAZLI', '', '']);
+  Object.entries(turToplam).sort((a,b)=>b[1].tutar-a[1].tutar).forEach(([tid,v])=>{
+    satirlar.push([turAdi(tid), v.adet, fmt(v.tutar)]);
+  });
+  csvIndir(`rapor_${bas}_${bit}.csv`, ['Ad','Adet','Tutar (₺)'], satirlar);
 }
 
 /* ---------------- GİRİŞ ŞABLONU (hangi müşteri hangi ekmeği alıyor) ---------------- */
@@ -1869,6 +1952,7 @@ window.birimFiyatHesapla = birimFiyatHesapla;
 window.buildTabs = buildTabs;
 window.canliSenkronuBaslat = canliSenkronuBaslat;
 window.closeModal = closeModal;
+window.csvIndir = csvIndir;
 window.degistirGunlukGirisTarihi = degistirGunlukGirisTarihi;
 window.demoLoad = demoLoad;
 window.demoSave = demoSave;
@@ -1899,6 +1983,7 @@ window.kaydetTopluMusteri = kaydetTopluMusteri;
 window.kaydetYeniKayit = kaydetYeniKayit;
 window.kayitFiyatGuncelle = kayitFiyatGuncelle;
 window.kayitlarAltSekmeDegistir = kayitlarAltSekmeDegistir;
+window.kayitlarCsvIndir = kayitlarCsvIndir;
 window.kayitlarDonemDegisti = kayitlarDonemDegisti;
 window.kayitlarOzelTarihGuncelle = kayitlarOzelTarihGuncelle;
 window.kullaniciAdiCoz = kullaniciAdiCoz;
@@ -1910,6 +1995,7 @@ window.musteriAramaHtml = musteriAramaHtml;
 window.musteriAramaSec = musteriAramaSec;
 window.musteriBakiye = musteriBakiye;
 window.musteriBakiyeGorulebilir = musteriBakiyeGorulebilir;
+window.musteriDetayCsvIndir = musteriDetayCsvIndir;
 window.musteriEtiketToId = musteriEtiketToId;
 window.musteriGecmisiModal = musteriGecmisiModal;
 window.musteriPortalSenkronEt = musteriPortalSenkronEt;
@@ -1918,11 +2004,13 @@ window.musteriToplamBorc = musteriToplamBorc;
 window.musteriToplamOdenen = musteriToplamOdenen;
 window.odemeAlModal = odemeAlModal;
 window.odemeGecmisiModal = odemeGecmisiModal;
+window.odemelerCsvIndir = odemelerCsvIndir;
 window.openFontSizeModal = openFontSizeModal;
 window.otomatikGirisDurumGoster = otomatikGirisDurumGoster;
 window.persist = persist;
 window.portalLinkKopyala = portalLinkKopyala;
 window.portalWhatsappGonder = portalWhatsappGonder;
+window.raporCsvIndir = raporCsvIndir;
 window.raporDetayaKapat = raporDetayaKapat;
 window.raporDonemDegisti = raporDonemDegisti;
 window.raporMusteriSec = raporMusteriSec;
@@ -1974,6 +2062,7 @@ window.unGirisKaydet = unGirisKaydet;
 window.unGirisOnizlemeGuncelle = unGirisOnizlemeGuncelle;
 window.unGirisTarihDegistir = unGirisTarihDegistir;
 window.unHesabiHesapla = unHesabiHesapla;
+window.urunDetayCsvIndir = urunDetayCsvIndir;
 window.verileriYenile = verileriYenile;
 window.whatsappGonderListeden = whatsappGonderListeden;
 window.whatsappMesajiAc = whatsappMesajiAc;
