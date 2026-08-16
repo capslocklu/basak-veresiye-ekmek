@@ -558,10 +558,15 @@ function kaydetYeniKayit(){
 /* ---------------- KAYITLAR (geçmiş liste) ---------------- */
 let kayitlarAltSekme = 'teslimat';
 let kayitlarDonemTipi = 'tumu';
+let kayitlarMusteriFiltre = '';
 let kayitlarBaslangic = null;
 let kayitlarBitis = null;
 function kayitlarDonemDegisti(tip){
   kayitlarDonemTipi = tip;
+  renderTab('kayitlar');
+}
+function kayitlarMusteriFiltreDegisti(musteriId){
+  kayitlarMusteriFiltre = musteriId;
   renderTab('kayitlar');
 }
 function kayitlarOzelTarihGuncelle(){
@@ -581,11 +586,26 @@ function renderKayitlarTab(main){
     kayitlarDonemTipi = 'bugun';
   }
   const {bas, bit} = donemTarihAraligiHesapla(kayitlarDonemTipi, kayitlarBaslangic, kayitlarBitis);
-  const kayitlar = [...DATA.kayitlar].filter(k=>k.tarih>=bas && k.tarih<=bit).sort((a,b)=>a.tarih<b.tarih?1:-1);
-  const odemeler = [...DATA.odemeler].filter(o=>o.tarih>=bas && o.tarih<=bit).sort((a,b)=>a.tarih<b.tarih?1:-1);
+  let kayitlar = [...DATA.kayitlar].filter(k=>k.tarih>=bas && k.tarih<=bit);
+  let odemeler = [...DATA.odemeler].filter(o=>o.tarih>=bas && o.tarih<=bit);
+  if(kayitlarMusteriFiltre){
+    kayitlar = kayitlar.filter(k=>k.musteriId===kayitlarMusteriFiltre);
+    odemeler = odemeler.filter(o=>o.musteriId===kayitlarMusteriFiltre);
+  }
+  kayitlar.sort((a,b)=>a.tarih<b.tarih?1:-1);
+  odemeler.sort((a,b)=>a.tarih<b.tarih?1:-1);
+  const musteriOpts = DATA.musteriler
+    .filter(m=>musteriBakiyeGorulebilir(m.id))
+    .sort((a,b)=>a.ad.localeCompare(b.ad,'tr'))
+    .map(m=>`<option value="${m.id}" ${kayitlarMusteriFiltre===m.id?'selected':''}>${m.ad}</option>`).join('');
   main.innerHTML = `
     <div class="card">
       ${donemSecimHtml('kayitlar', kayitlarDonemTipi, kayitlarBaslangic, kayitlarBitis, 'kayitlarDonemDegisti', !isPatron())}
+      <label style="margin-top:10px">Müşteri</label>
+      <select onchange="kayitlarMusteriFiltreDegisti(this.value)">
+        <option value="" ${!kayitlarMusteriFiltre?'selected':''}>Tüm Müşteriler</option>
+        ${musteriOpts}
+      </select>
       <div style="display:flex;gap:8px;margin:14px 0">
         <button class="btn ${kayitlarAltSekme==='teslimat'?'btn-primary':'btn-ghost'}" style="flex:1" onclick="kayitlarAltSekmeDegistir('teslimat')">📦 Teslimatlar</button>
         <button class="btn ${kayitlarAltSekme==='odeme'?'btn-primary':'btn-ghost'}" style="flex:1" onclick="kayitlarAltSekmeDegistir('odeme')">💳 Ödemeler</button>
@@ -608,15 +628,21 @@ function renderKayitlarTab(main){
 }
 function kayitlarCsvIndir(){
   const {bas, bit} = donemTarihAraligiHesapla(kayitlarDonemTipi, kayitlarBaslangic, kayitlarBitis);
-  const kayitlar = [...DATA.kayitlar].filter(k=>k.tarih>=bas && k.tarih<=bit).sort((a,b)=>a.tarih<b.tarih?1:-1);
+  let kayitlar = [...DATA.kayitlar].filter(k=>k.tarih>=bas && k.tarih<=bit);
+  if(kayitlarMusteriFiltre) kayitlar = kayitlar.filter(k=>k.musteriId===kayitlarMusteriFiltre);
+  kayitlar.sort((a,b)=>a.tarih<b.tarih?1:-1);
   const satirlar = kayitlar.map(k=>[k.tarih, musteriAdi(k.musteriId), turAdi(k.turId), k.adet, fmt(k.birimFiyat), fmt(k.adet*k.birimFiyat), k.odendi?'Peşin':'Veresiye']);
-  csvIndir(`teslimatlar_${bas}_${bit}.csv`, ['Tarih','Müşteri','Ürün','Adet','Birim Fiyat (₺)','Tutar (₺)','Durum'], satirlar);
+  const dosyaEki = kayitlarMusteriFiltre ? '_'+musteriAdi(kayitlarMusteriFiltre) : '';
+  csvIndir(`teslimatlar${dosyaEki}_${bas}_${bit}.csv`, ['Tarih','Müşteri','Ürün','Adet','Birim Fiyat (₺)','Tutar (₺)','Durum'], satirlar);
 }
 function odemelerCsvIndir(){
   const {bas, bit} = donemTarihAraligiHesapla(kayitlarDonemTipi, kayitlarBaslangic, kayitlarBitis);
-  const odemeler = [...DATA.odemeler].filter(o=>o.tarih>=bas && o.tarih<=bit).sort((a,b)=>a.tarih<b.tarih?1:-1);
+  let odemeler = [...DATA.odemeler].filter(o=>o.tarih>=bas && o.tarih<=bit);
+  if(kayitlarMusteriFiltre) odemeler = odemeler.filter(o=>o.musteriId===kayitlarMusteriFiltre);
+  odemeler.sort((a,b)=>a.tarih<b.tarih?1:-1);
   const satirlar = odemeler.map(o=>[o.tarih, musteriAdi(o.musteriId), fmt(o.tutar), o.not||'']);
-  csvIndir(`odemeler_${bas}_${bit}.csv`, ['Tarih','Müşteri','Tutar (₺)','Not'], satirlar);
+  const dosyaEki = kayitlarMusteriFiltre ? '_'+musteriAdi(kayitlarMusteriFiltre) : '';
+  csvIndir(`odemeler${dosyaEki}_${bas}_${bit}.csv`, ['Tarih','Müşteri','Tutar (₺)','Not'], satirlar);
 }
 function renderOdemeTablosu(list){
   if(!list.length) return `<div class="empty">Henüz ödeme kaydı yok.</div>`;
@@ -1985,6 +2011,7 @@ window.kayitFiyatGuncelle = kayitFiyatGuncelle;
 window.kayitlarAltSekmeDegistir = kayitlarAltSekmeDegistir;
 window.kayitlarCsvIndir = kayitlarCsvIndir;
 window.kayitlarDonemDegisti = kayitlarDonemDegisti;
+window.kayitlarMusteriFiltreDegisti = kayitlarMusteriFiltreDegisti;
 window.kayitlarOzelTarihGuncelle = kayitlarOzelTarihGuncelle;
 window.kullaniciAdiCoz = kullaniciAdiCoz;
 window.localISO = localISO;
