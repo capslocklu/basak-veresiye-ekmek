@@ -73,6 +73,7 @@ function semaGuvenceyeAl(d){
   if(!Array.isArray(d.odemeler)) d.odemeler = [];
   if(!Array.isArray(d.users)) d.users = [{id:'u1', email:'patron', ad:'Yönetici'}];
   if(!Array.isArray(d.sablon)) d.sablon = [];
+  if(!Array.isArray(d.unTeslimleri)) d.unTeslimleri = [];
   return d;
 }
 function demoLoad(){
@@ -978,6 +979,7 @@ function unGirisOnizlemeGuncelle(musteriId){
         ${yeniCuval} çuval ${kazanilanCuval>0 ? `<span style="font-size:12px">(+${kazanilanCuval} yeni!)</span>` : ''}
       </div>
       <div style="font-size:11px;opacity:.9">₺${fmt(yeniToplamTutar)} → ${fmt(yeniEsdegerAdet)} eşdeğer ${un.referansUrun.ad}</div>
+      <div style="font-size:10.5px;opacity:.85;margin-top:3px">✅ Teslim: ${un.verilenCuval} · ⏳ Bekleyen: ${yeniCuval - un.verilenCuval}</div>
     </div>
   `;
 }
@@ -1012,9 +1014,49 @@ function unHesabiHesapla(musteriId){
   const toplamTutar = DATA.kayitlar.filter(k=>k.musteriId===musteriId).reduce((s,k)=>s+k.adet*k.birimFiyat,0);
   const esdegerAdet = toplamTutar / referansUrun.fiyat;
   const esik = m.unHesabiEsik || 200;
-  const cuvalSayisi = Math.floor(esdegerAdet / esik);
+  const cuvalSayisi = Math.floor(esdegerAdet / esik); // bugüne kadar teslimatlarla toplam hak edilen
   const kalanAdet = esdegerAdet - (cuvalSayisi*esik);
-  return {referansUrun, toplamTutar, esdegerAdet, esik, cuvalSayisi, kalanAdet};
+  const verilenCuval = DATA.unTeslimleri.filter(u=>u.musteriId===musteriId).reduce((s,u)=>s+u.cuvalSayisi,0);
+  const bekleyenCuval = cuvalSayisi - verilenCuval; // hak edildiği hâlde henüz fiziksel teslim edilmemiş
+  return {referansUrun, toplamTutar, esdegerAdet, esik, cuvalSayisi, kalanAdet, verilenCuval, bekleyenCuval};
+}
+// Un ödemeli müşteriden FİZİKSEL UN TESLİMİ alındığında kullanılır — normal TL ödemesinden
+// farklıdır. Kaç çuval teslim aldığını girersin; bunun parasal karşılığı (çuval × eşik × referans
+// fiyat) otomatik olarak normal bir ödeme gibi bakiyeden düşülür, AYRICA "kaç çuval zaten teslim
+// edildi" bilgisi ayrı tutulur ki un hesabı bir dahaki sefere doğru kalan sayıyı göstersin.
+function unTahsilatiModal(musteriId){
+  const un = unHesabiHesapla(musteriId);
+  if(!un){ toast('Bu müşteride un hesabı aktif değil'); return; }
+  showModal(`
+    <button class="modalClose" onclick="closeModal()">✕</button>
+    <h3>${musteriAdi(musteriId)} — Un Tahsilatı</h3>
+    <p style="font-size:12.5px;color:var(--muted);margin:0 0 10px">
+      Toplam hak edilen: ${un.cuvalSayisi} çuval · Şimdiye kadar teslim edilen: ${un.verilenCuval} çuval ·
+      Bekleyen: ${un.bekleyenCuval} çuval
+    </p>
+    <label>Kaç Çuval Un Teslim Aldın</label>
+    <input id="utCuval" type="number" min="1" value="${Math.max(1,un.bekleyenCuval)}">
+    <label>Tarih</label>
+    <input id="utTarih" type="date" value="${todayISO()}" max="${todayISO()}">
+    <label>Not (opsiyonel)</label>
+    <input id="utNot" placeholder="örn: değirmenden elden teslim">
+    <p style="font-size:11.5px;color:var(--muted);margin:6px 0 0">
+      Bu işlem, girdiğin çuval sayısının parasal karşılığını (₺${fmt(un.esik*un.referansUrun.fiyat)}/çuval) otomatik olarak bakiyeden düşer.
+    </p>
+    <button class="btn btn-primary btn-block" style="margin-top:10px" onclick="unTahsilatiKaydet('${musteriId}')">Kaydet</button>
+  `);
+}
+function unTahsilatiKaydet(musteriId){
+  const un = unHesabiHesapla(musteriId);
+  const cuvalSayisi = Number(document.getElementById('utCuval').value);
+  const tarih = document.getElementById('utTarih').value || todayISO();
+  const not = document.getElementById('utNot').value.trim();
+  if(!cuvalSayisi || cuvalSayisi<=0){ toast('Geçerli bir çuval sayısı gir'); return; }
+  const tutar = cuvalSayisi * un.esik * un.referansUrun.fiyat;
+  DATA.unTeslimleri.push({id:'ut_'+Date.now(), musteriId, cuvalSayisi, tarih, not});
+  DATA.odemeler.push({id:'o_'+Date.now(), musteriId, tutar, tarih, not: `🌾 ${cuvalSayisi} çuval un tahsilatı${not?' — '+not:''}`});
+  persist(); musteriPortalSenkronEt(musteriId);
+  closeModal(); toast(`${cuvalSayisi} çuval un tahsilatı kaydedildi ✓`); renderTab(activeTab);
 }
 function musteriGecmisiModal(musteriId){
   if(!musteriBakiyeGorulebilir(musteriId)){ toast('Bu müşteri için yetkin yok'); return; }
@@ -1039,11 +1081,15 @@ function musteriGecmisiModal(musteriId){
   const unHtml = un ? `
     <div style="background:var(--wheat);color:#fff;border-radius:12px;padding:12px 16px;margin-bottom:14px">
       <div style="font-size:11px;opacity:.9">UN HESABI (${un.referansUrun.ad} eşdeğeri, her ${un.esik} adette 1 çuval)</div>
-      <div style="font-size:20px;font-weight:700;margin:4px 0">${un.cuvalSayisi} çuval un hak ediyor</div>
-      <div style="font-size:12px;opacity:.9">
+      <div style="font-size:20px;font-weight:700;margin:4px 0">${un.cuvalSayisi} çuval hak edildi</div>
+      <div style="font-size:12px;opacity:.9;margin-bottom:8px">
         Toplam ₺${fmt(un.toplamTutar)} → ${fmt(un.esdegerAdet)} eşdeğer ${un.referansUrun.ad} ·
         Sonraki çuvala ${fmt(un.esik - un.kalanAdet)} eşdeğer kaldı
       </div>
+      <div style="font-size:13px;font-weight:600;background:rgba(255,255,255,0.18);border-radius:8px;padding:6px 10px;margin-bottom:8px">
+        ✅ Teslim edilen: ${un.verilenCuval} çuval &nbsp;·&nbsp; ⏳ Bekleyen: ${un.bekleyenCuval} çuval
+      </div>
+      <button class="btn btn-block" style="background:#fff;color:var(--oven);font-weight:700" onclick="closeModal(); unTahsilatiModal('${musteriId}')">🌾 Un Tahsilatı Kaydet</button>
     </div>
   ` : '';
   showModal(`
@@ -2089,6 +2135,8 @@ window.unGirisKaydet = unGirisKaydet;
 window.unGirisOnizlemeGuncelle = unGirisOnizlemeGuncelle;
 window.unGirisTarihDegistir = unGirisTarihDegistir;
 window.unHesabiHesapla = unHesabiHesapla;
+window.unTahsilatiKaydet = unTahsilatiKaydet;
+window.unTahsilatiModal = unTahsilatiModal;
 window.urunDetayCsvIndir = urunDetayCsvIndir;
 window.verileriYenile = verileriYenile;
 window.whatsappGonderListeden = whatsappGonderListeden;
