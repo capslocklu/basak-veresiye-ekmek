@@ -74,6 +74,7 @@ function semaGuvenceyeAl(d){
   if(!Array.isArray(d.users)) d.users = [{id:'u1', email:'patron', ad:'Yönetici'}];
   if(!Array.isArray(d.sablon)) d.sablon = [];
   if(!Array.isArray(d.unTeslimleri)) d.unTeslimleri = [];
+  if(!d.telegramAyarlari) d.telegramAyarlari = {token:'', chatId:'', bildirimYeniKayit:true, bildirimOdeme:true, bildirimUn:true};
   return d;
 }
 function demoLoad(){
@@ -129,6 +130,45 @@ function canliSenkronuBaslat(){
 /* ---------------- YARDIMCI FONKSİYONLAR ---------------- */
 function fmt(n){ return Number(n||0).toLocaleString('tr-TR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 // Türkçe Excel'de düzgün açılsın diye noktalı virgül (;) ayraç ve UTF-8 BOM kullanıyoruz.
+/* ---------------- TELEGRAM BİLDİRİMLERİ ---------------- */
+// Telegram Bot API'sine doğrudan tarayıcıdan istek atıyoruz — ayrı bir sunucuya gerek yok.
+// Sadece BİZDEN Telegram'a tek yönlü mesaj gönderiyoruz (bildirim), Telegram'dan komut
+// almıyoruz (bu, ayrı bir sunucu/webhook gerektirir).
+function telegramMesajGonder(mesaj){
+  const ayar = DATA.telegramAyarlari;
+  if(!ayar || !ayar.token || !ayar.chatId) return;
+  fetch(`https://api.telegram.org/bot${ayar.token}/sendMessage`, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({chat_id: ayar.chatId, text: mesaj, parse_mode:'HTML'})
+  }).catch(err=>console.error('Telegram gönderim hatası', err));
+}
+function telegramTestMesaji(){
+  const token = document.getElementById('tgToken').value.trim();
+  const chatId = document.getElementById('tgChatId').value.trim();
+  if(!token || !chatId){ toast('Önce token ve chat ID gir'); return; }
+  fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({chat_id: chatId, text: '✅ Veresiye Takip botu bağlandı! Bu bir test mesajıdır.'})
+  }).then(r=>r.json()).then(sonuc=>{
+    if(sonuc.ok) toast("Test mesajı gönderildi ✓ Telegram'ı kontrol et");
+    else toast('⚠️ Hata: ' + (sonuc.description||'bilinmeyen hata'));
+  }).catch(err=>{
+    toast('⚠️ Gönderilemedi: ' + err.message);
+  });
+}
+function telegramAyarKaydet(){
+  DATA.telegramAyarlari = {
+    token: document.getElementById('tgToken').value.trim(),
+    chatId: document.getElementById('tgChatId').value.trim(),
+    bildirimYeniKayit: document.getElementById('tgBildirimKayit').checked,
+    bildirimOdeme: document.getElementById('tgBildirimOdeme').checked,
+    bildirimUn: document.getElementById('tgBildirimUn').checked,
+  };
+  persist();
+  toast('Kaydedildi ✓');
+}
 function csvIndir(dosyaAdi, basliklar, satirlar){
   const kacis = (v)=>{
     const s = String(v==null?'':v);
@@ -541,6 +581,24 @@ function kayitFiyatGuncelle(){
   const musteriId = document.getElementById('kMusteriId').value;
   document.getElementById('kFiyat').value = musteriId ? birimFiyatHesapla(musteriId, turId) : (DATA.ekmekTurleri.find(t=>t.id===turId)||{}).fiyat || '';
 }
+// Yeni bir teslimat kaydından sonra çağrılır: hem "yeni kayıt" bildirimini hem (varsa) "yeni
+// çuval un kazanıldı" kutlama bildirimini gönderir. eskiUn, kayıt eklenmeden ÖNCEKİ un hesabı
+// durumudur (unHesabiHesapla() ile alınır) — karşılaştırma için gerekli.
+function yeniKayitBildirimGonder(musteriId, turId, adet, fiyat, eskiUn){
+  const ayar = DATA.telegramAyarlari;
+  if(!ayar || !ayar.token || !ayar.chatId) return;
+  const m = DATA.musteriler.find(x=>x.id===musteriId);
+  const t = DATA.ekmekTurleri.find(x=>x.id===turId);
+  if(ayar.bildirimYeniKayit && m && t){
+    telegramMesajGonder(`📦 <b>Yeni Kayıt</b>\n${m.ad} — ${t.ad} × ${adet} = ₺${fmt(adet*fiyat)}`);
+  }
+  if(ayar.bildirimUn && eskiUn){
+    const yeniUn = unHesabiHesapla(musteriId);
+    if(yeniUn && yeniUn.cuvalSayisi > eskiUn.cuvalSayisi){
+      telegramMesajGonder(`🌾 <b>Yeni Çuval Un Kazanıldı!</b>\n${m.ad} artık toplam ${yeniUn.cuvalSayisi} çuval hak ediyor (+${yeniUn.cuvalSayisi - eskiUn.cuvalSayisi})`);
+    }
+  }
+}
 function kaydetYeniKayit(){
   const musteriId = document.getElementById('kMusteriId').value;
   const turId = document.getElementById('kTur').value;
@@ -550,10 +608,13 @@ function kaydetYeniKayit(){
   const odendi = document.getElementById('kOdendi').checked;
   if(!musteriId){ toast('Listeden bir müşteri seç'); return; }
   if(!adet || adet<=0){ toast('Geçerli bir adet gir'); return; }
+  const eskiUn = unHesabiHesapla(musteriId);
   DATA.kayitlar.push({
     id:'k_'+Date.now(), musteriId, turId, adet, birimFiyat:fiyat, tarih, odendi
   });
-  persist(); musteriPortalSenkronEt(musteriId); closeModal(); toast('Kaydedildi ✓'); renderTab(activeTab);
+  persist(); musteriPortalSenkronEt(musteriId);
+  yeniKayitBildirimGonder(musteriId, turId, adet, fiyat, eskiUn);
+  closeModal(); toast('Kaydedildi ✓'); renderTab(activeTab);
 }
 
 /* ---------------- KAYITLAR (geçmiş liste) ---------------- */
@@ -833,7 +894,15 @@ function kaydetGenelOdeme(){
   if(!musteriBakiyeGorulebilir(musteriId)){ toast('Bu müşteri için yetkin yok'); return; }
   if(!tutar || tutar<=0){ toast('Geçerli bir tutar gir'); return; }
   DATA.odemeler.push({id:'o_'+Date.now(), musteriId, tutar, tarih:todayISO(), not});
-  persist(); musteriPortalSenkronEt(musteriId); closeModal(); toast('Tahsilat kaydedildi ✓'); renderTab(activeTab);
+  persist(); musteriPortalSenkronEt(musteriId);
+  odemeBildirimGonder(musteriId, tutar, not);
+  closeModal(); toast('Tahsilat kaydedildi ✓'); renderTab(activeTab);
+}
+function odemeBildirimGonder(musteriId, tutar, not){
+  const ayar = DATA.telegramAyarlari;
+  if(!ayar || !ayar.token || !ayar.chatId || !ayar.bildirimOdeme) return;
+  const m = DATA.musteriler.find(x=>x.id===musteriId);
+  telegramMesajGonder(`💳 <b>Tahsilat Alındı</b>\n${m?.ad} — ₺${fmt(tutar)}${not?'\n'+not:''}\nGüncel bakiye: ₺${fmt(musteriBakiye(musteriId))}`);
 }
 function odemeAlModal(musteriId){
   if(!musteriBakiyeGorulebilir(musteriId)){ toast('Bu müşteri için yetkin yok'); return; }
@@ -854,7 +923,9 @@ function kaydetOdeme(musteriId){
   const not = document.getElementById('oNot').value.trim();
   if(!tutar || tutar<=0){ toast('Geçerli bir tutar gir'); return; }
   DATA.odemeler.push({id:'o_'+Date.now(), musteriId, tutar, tarih:todayISO(), not});
-  persist(); musteriPortalSenkronEt(musteriId); closeModal(); toast('Tahsilat kaydedildi ✓'); renderTab('borclar');
+  persist(); musteriPortalSenkronEt(musteriId);
+  odemeBildirimGonder(musteriId, tutar, not);
+  closeModal(); toast('Tahsilat kaydedildi ✓'); renderTab('borclar');
 }
 
 /* ---------------- MÜŞTERİLER ---------------- */
@@ -986,6 +1057,11 @@ function unGirisOnizlemeGuncelle(musteriId){
 function unGirisKaydet(){
   let eklenen = 0;
   const musteriIdleri = new Set();
+  const eskiUnler = {};
+  document.querySelectorAll('.unGirisAdet').forEach(el=>{
+    const mid = el.dataset.musteri;
+    if(!(mid in eskiUnler)) eskiUnler[mid] = unHesabiHesapla(mid);
+  });
   document.querySelectorAll('.unGirisAdet').forEach(el=>{
     const adet = Number(el.value);
     if(!adet || adet<=0) return;
@@ -1003,6 +1079,18 @@ function unGirisKaydet(){
   if(eklenen===0){ toast('Adet girilen satır yok.'); return; }
   persist();
   musteriIdleri.forEach(id=>musteriPortalSenkronEt(id));
+  const ayar = DATA.telegramAyarlari;
+  if(ayar && ayar.token && ayar.chatId && ayar.bildirimUn){
+    musteriIdleri.forEach(id=>{
+      const eskiUn = eskiUnler[id];
+      if(!eskiUn) return;
+      const yeniUn = unHesabiHesapla(id);
+      if(yeniUn && yeniUn.cuvalSayisi > eskiUn.cuvalSayisi){
+        const m = DATA.musteriler.find(x=>x.id===id);
+        telegramMesajGonder(`🌾 <b>Yeni Çuval Un Kazanıldı!</b>\n${m?.ad} artık toplam ${yeniUn.cuvalSayisi} çuval hak ediyor (+${yeniUn.cuvalSayisi-eskiUn.cuvalSayisi})`);
+      }
+    });
+  }
   toast(`${eklenen} satır kaydedildi ✓`);
   renderTab('ungiris');
 }
@@ -1056,6 +1144,7 @@ function unTahsilatiKaydet(musteriId){
   DATA.unTeslimleri.push({id:'ut_'+Date.now(), musteriId, cuvalSayisi, tarih, not});
   DATA.odemeler.push({id:'o_'+Date.now(), musteriId, tutar, tarih, not: `🌾 ${cuvalSayisi} çuval un tahsilatı${not?' — '+not:''}`});
   persist(); musteriPortalSenkronEt(musteriId);
+  odemeBildirimGonder(musteriId, tutar, `🌾 ${cuvalSayisi} çuval un tahsilatı`);
   closeModal(); toast(`${cuvalSayisi} çuval un tahsilatı kaydedildi ✓`); renderTab(activeTab);
 }
 function musteriGecmisiModal(musteriId){
@@ -1899,29 +1988,66 @@ function renderGunlukGirisTab(main){
 }
 function gunlukGirisKaydet(){
   let eklenen = 0;
+  let toplamTutar = 0;
   const gruplar = gunlukGirisGrupla();
+  const eskiUnler = {};
+  gruplar.forEach(g=>{ eskiUnler[g.musteriId] = unHesabiHesapla(g.musteriId); });
   gruplar.forEach(g=>{
     const odendi = window.girisOdendi[g.musteriId]===undefined ? false : window.girisOdendi[g.musteriId];
     g.satirlar.forEach(s=>{
       const adet = window.girisAdetleri[s.id];
       if(!adet || adet<=0) return;
-      const t = DATA.ekmekTurleri.find(x=>x.id===s.turId);
+      const fiyat = birimFiyatHesapla(g.musteriId, s.turId);
       DATA.kayitlar.push({
         id:'k_'+Date.now()+'_'+s.id, musteriId:g.musteriId, turId:s.turId,
-        adet, birimFiyat:birimFiyatHesapla(g.musteriId, s.turId), tarih:girisTarih, odendi
+        adet, birimFiyat:fiyat, tarih:girisTarih, odendi
       });
       eklenen++;
+      toplamTutar += adet*fiyat;
       window.girisAdetleri[s.id] = '';
     });
   });
   if(eklenen===0){ toast('Adet girilen satır yok.'); return; }
   persist();
   gruplar.forEach(g=>musteriPortalSenkronEt(g.musteriId));
+  const ayar = DATA.telegramAyarlari;
+  if(ayar && ayar.token && ayar.chatId){
+    if(ayar.bildirimYeniKayit && eklenen>0){
+      telegramMesajGonder(`📝 <b>Günlük Giriş Kaydedildi</b>\n${girisTarih} — ${eklenen} satır, toplam ₺${fmt(toplamTutar)}`);
+    }
+    if(ayar.bildirimUn){
+      gruplar.forEach(g=>{
+        const eskiUn = eskiUnler[g.musteriId];
+        if(!eskiUn) return;
+        const yeniUn = unHesabiHesapla(g.musteriId);
+        if(yeniUn && yeniUn.cuvalSayisi > eskiUn.cuvalSayisi){
+          const m = DATA.musteriler.find(x=>x.id===g.musteriId);
+          telegramMesajGonder(`🌾 <b>Yeni Çuval Un Kazanıldı!</b>\n${m?.ad} artık toplam ${yeniUn.cuvalSayisi} çuval hak ediyor (+${yeniUn.cuvalSayisi-eskiUn.cuvalSayisi})`);
+        }
+      });
+    }
+  }
   toast(`${eklenen} satır kaydedildi ✓`);
   renderTab('gunlukgiris');
 }
 
 /* ---------------- PERSONEL (sadece patron yönetir) ---------------- */
+function telegramGunlukOzetGonder(){
+  const bugun = todayISO();
+  const kayitlar = DATA.kayitlar.filter(k=>k.tarih===bugun);
+  const odemeler = DATA.odemeler.filter(o=>o.tarih===bugun);
+  const toplamCiro = kayitlar.reduce((s,k)=>s+k.adet*k.birimFiyat,0);
+  const toplamAdet = kayitlar.reduce((s,k)=>s+k.adet,0);
+  const toplamTahsilat = odemeler.reduce((s,o)=>s+o.tutar,0);
+  const borcluSayisi = DATA.musteriler.filter(m=>musteriBakiye(m.id)>0).length;
+  const toplamBorc = DATA.musteriler.reduce((s,m)=>s+Math.max(0,musteriBakiye(m.id)),0);
+  const mesaj = `📊 <b>Günlük Özet — ${bugun}</b>\n\n`
+    + `📦 Bugün: ${toplamAdet} adet, ₺${fmt(toplamCiro)} ciro\n`
+    + `💳 Bugünkü tahsilat: ₺${fmt(toplamTahsilat)}\n\n`
+    + `⚠️ Toplam açık veresiye: ₺${fmt(toplamBorc)} (${borcluSayisi} müşteri)`;
+  telegramMesajGonder(mesaj);
+  toast("Gönderiliyor... Telegram'ı kontrol et");
+}
 function renderPersonelTab(main){
   const personeller = DATA.users.filter(u=>u.role==='personel');
   const rows = personeller.map(u=>{
@@ -1955,6 +2081,47 @@ function renderPersonelTab(main){
         Firebase Console → Authentication → Users → Add user'dan açabilirsin. Buradaki kayıt
         sadece rolünü ve yetkisini belirler, şifre burada tutulmaz.
       </p>
+    </div>
+    <div class="card">
+      <h2>🔔 Telegram Bildirimleri</h2>
+      <p style="font-size:12px;color:var(--muted);margin:-4px 0 10px">
+        Yeni kayıt, ödeme alındı ve yeni çuval un kazanıldığında Telegram'a otomatik bildirim
+        gönderir. Kurulum adımları aşağıda.
+      </p>
+      <label>Bot Token</label>
+      <input id="tgToken" value="${(DATA.telegramAyarlari&&DATA.telegramAyarlari.token)||''}" placeholder="1234567890:AAExxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx">
+      <label>Chat ID</label>
+      <input id="tgChatId" value="${(DATA.telegramAyarlari&&DATA.telegramAyarlari.chatId)||''}" placeholder="örn: -1001234567890 ya da 123456789">
+      <label style="display:flex;align-items:center;gap:6px;margin-top:8px;font-weight:400;color:var(--text)">
+        <input type="checkbox" id="tgBildirimKayit" style="width:auto;margin:0" ${!DATA.telegramAyarlari||DATA.telegramAyarlari.bildirimYeniKayit?'checked':''}>
+        Yeni kayıt bildirimleri
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;margin-top:6px;font-weight:400;color:var(--text)">
+        <input type="checkbox" id="tgBildirimOdeme" style="width:auto;margin:0" ${!DATA.telegramAyarlari||DATA.telegramAyarlari.bildirimOdeme?'checked':''}>
+        Ödeme/tahsilat bildirimleri
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;margin-top:6px;font-weight:400;color:var(--text)">
+        <input type="checkbox" id="tgBildirimUn" style="width:auto;margin:0" ${!DATA.telegramAyarlari||DATA.telegramAyarlari.bildirimUn?'checked':''}>
+        Yeni çuval un kazanıldı bildirimleri
+      </label>
+      <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="telegramAyarKaydet()">Kaydet</button>
+        <button class="btn btn-ghost" onclick="telegramTestMesaji()">📤 Test Mesajı Gönder</button>
+        <button class="btn btn-ghost" onclick="telegramGunlukOzetGonder()">📊 Günlük Özeti Şimdi Gönder</button>
+      </div>
+      <details style="margin-top:14px;font-size:12px;color:var(--muted);">
+        <summary style="cursor:pointer;font-weight:600;color:var(--text)">Nasıl kurulur? (bir kereye mahsus)</summary>
+        <ol style="line-height:1.8;padding-left:18px;margin-top:8px">
+          <li>Telegram'da <b>@BotFather</b>'ı bul, sohbet başlat</li>
+          <li><code>/newbot</code> yaz, bot için bir isim ve kullanıcı adı ver (kullanıcı adı "bot" ile bitmeli, örn. VeresiyeTakipBot)</li>
+          <li>BotFather sana bir <b>token</b> verecek (örn. <code>123456:ABC-DEF...</code>) — yukarıdaki kutuya yapıştır</li>
+          <li>Bildirimlerin geleceği yeri seç: kendi sohbetini kullanacaksan Telegram'da botunu bul, <code>/start</code> yaz; bir gruba göndermek istersen botu o gruba ekle</li>
+          <li><b>Chat ID'yi bulmak için:</b> tarayıcıda şu adresi aç (TOKEN yerine kendi token'ını yaz):<br>
+            <code>https://api.telegram.org/botTOKEN/getUpdates</code><br>
+            botuna bir mesaj gönderdikten sonra bu sayfayı yenile, çıkan yazıda <code>"chat":{"id":...}</code> kısmındaki sayı senin Chat ID'n (gruplarda genelde eksi işaretli bir sayıdır, örn. -1001234567890)</li>
+          <li>Chat ID'yi yukarıdaki kutuya yapıştır, Kaydet'e bas, Test Mesajı gönder'e basıp dene</li>
+        </ol>
+      </details>
     </div>
   `;
 }
@@ -2076,6 +2243,7 @@ window.musteriSatirlariniOlustur = musteriSatirlariniOlustur;
 window.musteriToplamBorc = musteriToplamBorc;
 window.musteriToplamOdenen = musteriToplamOdenen;
 window.odemeAlModal = odemeAlModal;
+window.odemeBildirimGonder = odemeBildirimGonder;
 window.odemeGecmisiModal = odemeGecmisiModal;
 window.odemelerCsvIndir = odemelerCsvIndir;
 window.openFontSizeModal = openFontSizeModal;
@@ -2123,6 +2291,10 @@ window.silOdeme = silOdeme;
 window.silPersonel = silPersonel;
 window.silSablonSatiri = silSablonSatiri;
 window.silTur = silTur;
+window.telegramAyarKaydet = telegramAyarKaydet;
+window.telegramGunlukOzetGonder = telegramGunlukOzetGonder;
+window.telegramMesajGonder = telegramMesajGonder;
+window.telegramTestMesaji = telegramTestMesaji;
 window.toAuthEmail = toAuthEmail;
 window.toast = toast;
 window.todayISO = todayISO;
@@ -2141,3 +2313,4 @@ window.urunDetayCsvIndir = urunDetayCsvIndir;
 window.verileriYenile = verileriYenile;
 window.whatsappGonderListeden = whatsappGonderListeden;
 window.whatsappMesajiAc = whatsappMesajiAc;
+window.yeniKayitBildirimGonder = yeniKayitBildirimGonder;
