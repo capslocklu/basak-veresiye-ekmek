@@ -1914,10 +1914,16 @@ function sablonAsagi(id){
 let girisTarih = todayISO();
 window.girisAdetleri = {}; // {sablonId: adet} — window'a bağlı: inline oninput/onchange bunlara doğrudan erişebilsin
 window.girisOdendi = {};   // {musteriId: true|false}
+function girisSatiriEkle(satirId){
+  if(!window.girisSatirSayisi) window.girisSatirSayisi = {};
+  window.girisSatirSayisi[satirId] = (window.girisSatirSayisi[satirId] || 1) + 1;
+  renderTab('gunlukgiris');
+}
 function degistirGunlukGirisTarihi(val){
   girisTarih = val || todayISO();
   window.girisAdetleri = {};
   window.girisOdendi = {};
+  window.girisSatirSayisi = {};
   renderTab('gunlukgiris');
 }
 function gunlukGirisGrupla(){
@@ -1944,6 +1950,7 @@ function renderGunlukGirisTab(main){
   }
   const gruplar = gunlukGirisGrupla();
   const gecmisMi = girisTarih !== todayISO();
+  if(!window.girisSatirSayisi) window.girisSatirSayisi = {};
   const gruplarHtml = gruplar.map(g=>{
     const m = DATA.musteriler.find(x=>x.id===g.musteriId);
     if(!m) return '';
@@ -1951,13 +1958,23 @@ function renderGunlukGirisTab(main){
     const hucreler = g.satirlar.map(s=>{
       const t = DATA.ekmekTurleri.find(x=>x.id===s.turId);
       if(!t) return '';
-      const deger = window.girisAdetleri[s.id];
+      const sayac = window.girisSatirSayisi[s.id] || 1;
+      const kutular = [];
+      for(let i=0;i<sayac;i++){
+        const key = s.id+'_'+i;
+        const deger = window.girisAdetleri[key];
+        kutular.push(`
+        <input type="number" min="0" inputmode="numeric" placeholder="—" value="${deger===undefined||deger===''?'':deger}"
+          oninput="window.girisAdetleri['${key}']=this.value===''?'':Number(this.value)"
+          style="margin-bottom:3px;padding:7px 4px;text-align:center;font-weight:600;">`);
+      }
       return `
       <div style="margin-bottom:6px">
-        <div style="font-size:10px;color:var(--muted);margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t.ad}</div>
-        <input type="number" min="0" inputmode="numeric" placeholder="—" value="${deger===undefined||deger===''?'':deger}"
-          oninput="window.girisAdetleri['${s.id}']=this.value===''?'':Number(this.value)"
-          style="margin-bottom:0;padding:7px 4px;text-align:center;font-weight:600;">
+        <div style="font-size:10px;color:var(--muted);margin-bottom:2px;display:flex;justify-content:space-between;align-items:center">
+          <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t.ad}${sayac>1?` (${sayac} giriş)`:''}</span>
+          <button type="button" onclick="girisSatiriEkle('${s.id}')" title="Bugün bu üründen bir kez daha girecekseniz (örn. öğlen ikinci sefer) tıkla" style="border:none;background:var(--card-border);color:var(--text);border-radius:6px;width:18px;height:18px;font-size:12px;line-height:1;cursor:pointer;flex:0 0 auto">+</button>
+        </div>
+        ${kutular.join('')}
       </div>`;
     }).join('');
     return `
@@ -1995,16 +2012,20 @@ function gunlukGirisKaydet(){
   gruplar.forEach(g=>{
     const odendi = window.girisOdendi[g.musteriId]===undefined ? false : window.girisOdendi[g.musteriId];
     g.satirlar.forEach(s=>{
-      const adet = window.girisAdetleri[s.id];
-      if(!adet || adet<=0) return;
+      const sayac = window.girisSatirSayisi[s.id] || 1;
       const fiyat = birimFiyatHesapla(g.musteriId, s.turId);
-      DATA.kayitlar.push({
-        id:'k_'+Date.now()+'_'+s.id, musteriId:g.musteriId, turId:s.turId,
-        adet, birimFiyat:fiyat, tarih:girisTarih, odendi
-      });
-      eklenen++;
-      toplamTutar += adet*fiyat;
-      window.girisAdetleri[s.id] = '';
+      for(let i=0;i<sayac;i++){
+        const key = s.id+'_'+i;
+        const adet = window.girisAdetleri[key];
+        if(!adet || adet<=0) continue;
+        DATA.kayitlar.push({
+          id:'k_'+Date.now()+'_'+key, musteriId:g.musteriId, turId:s.turId,
+          adet, birimFiyat:fiyat, tarih:girisTarih, odendi
+        });
+        eklenen++;
+        toplamTutar += adet*fiyat;
+        window.girisAdetleri[key] = '';
+      }
     });
   });
   if(eklenen===0){ toast('Adet girilen satır yok.'); return; }
@@ -2211,6 +2232,7 @@ window.firestoreVerisiniYukle = firestoreVerisiniYukle;
 window.fmt = fmt;
 window.gecmisFiyatDuzelt = gecmisFiyatDuzelt;
 window.girisGunlukEkle = girisGunlukEkle;
+window.girisSatiriEkle = girisSatiriEkle;
 window.gorunurBakiyeMusteriIdleri = gorunurBakiyeMusteriIdleri;
 window.gunlukGirisGrupla = gunlukGirisGrupla;
 window.gunlukGirisKaydet = gunlukGirisKaydet;
