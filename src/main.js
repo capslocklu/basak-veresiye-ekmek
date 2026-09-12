@@ -3,6 +3,10 @@ import firebase from "firebase/compat/app";
 import "firebase/compat/auth";
 import "firebase/compat/firestore";
 
+// SÜRÜM NUMARASI: her önemli güncellemede burayı artırıyoruz — GitHub'a yüklediğin dosyanın
+// gerçekten güncellendiğini kontrol etmek için üst başlıkta görünür.
+const APP_SURUMU = "v15";
+
 /* =========================================================================
    VERESİYE TAKİP — hangi müşterinin ne kadar veresiye ekmek aldığını takip
    eden basit, çok kullanıcılı (Firebase) uygulama.
@@ -410,6 +414,8 @@ window.addEventListener('offline', ()=>{
 window.addEventListener('load', ()=>{
   applyTheme();
   applyFontSize();
+  document.querySelectorAll('#surumEtiketi, #surumEtiketiGiris').forEach(el=>{ if(el) el.textContent = APP_SURUMU; });
+  window._sonYedekTarihi = localStorage.getItem('veresiyeTakip_sonYedek') || null;
   girisGunlukEkle('Sayfa yüklendi. DEMO_MODE=' + DEMO_MODE);
   baglantiRozetiGuncelle();
   if(DEMO_MODE){
@@ -2144,7 +2150,61 @@ function renderPersonelTab(main){
         </ol>
       </details>
     </div>
+    <div class="card">
+      <h2>💾 Veri Yedekleme</h2>
+      <p style="font-size:12px;color:var(--muted);margin:-4px 0 10px">
+        Tüm verini (müşteriler, kayıtlar, ödemeler, ayarlar) tek bir dosyaya indirip telefonunda/
+        bilgisayarında saklayabilirsin. Bir şeyler ters giderse (yanlışlıkla silme, cihaz değişimi vb.)
+        bu dosyadan geri yükleyebilirsin.
+      </p>
+      ${window._sonYedekTarihi ? `<p style="font-size:11.5px;color:var(--muted);margin:0 0 10px">Son yedek: ${window._sonYedekTarihi}</p>` : `<p style="font-size:11.5px;color:var(--crust);margin:0 0 10px">⚠️ Henüz hiç yedek almadın.</p>`}
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="yedekAl()">💾 Yedek Al (İndir)</button>
+        <button class="btn btn-ghost" onclick="document.getElementById('yedekDosyaSecici').click()">📤 Yedekten Geri Yükle</button>
+      </div>
+      <input type="file" id="yedekDosyaSecici" accept="application/json" style="display:none" onchange="yedekYukle(event)">
+    </div>
   `;
+}
+/* ---------------- VERİ YEDEKLEME ---------------- */
+function yedekAl(){
+  const icerik = JSON.stringify(DATA, null, 2);
+  const blob = new Blob([icerik], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const tarih = todayISO();
+  const a = document.createElement('a');
+  a.href = url; a.download = `veresiye-takip-yedek-${tarih}.json`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  localStorage.setItem('veresiyeTakip_sonYedek', tarih);
+  window._sonYedekTarihi = tarih;
+  toast('Yedek indirildi ✓');
+  renderTab('personel');
+}
+function yedekYukle(event){
+  const dosya = event.target.files[0];
+  if(!dosya) return;
+  const okuyucu = new FileReader();
+  okuyucu.onload = (e)=>{
+    let yeniVeri;
+    try{
+      yeniVeri = JSON.parse(e.target.result);
+    } catch(err){
+      toast('⚠️ Dosya okunamadı — geçerli bir yedek dosyası değil');
+      return;
+    }
+    if(!yeniVeri || !Array.isArray(yeniVeri.musteriler) || !Array.isArray(yeniVeri.kayitlar)){
+      toast('⚠️ Bu dosya geçerli bir Veresiye Takip yedeği gibi görünmüyor');
+      return;
+    }
+    if(!confirm(`Bu dosyadaki veri (${yeniVeri.musteriler.length} müşteri, ${yeniVeri.kayitlar.length} kayıt) ŞU ANKİ TÜM VERİNİN ÜZERİNE yazılacak. Bu işlem geri alınamaz. Emin misin?`)) return;
+    DATA = semaGuvenceyeAl(yeniVeri);
+    persist();
+    toast('Yedek geri yüklendi ✓');
+    renderTab('personel');
+  };
+  okuyucu.readAsText(dosya);
+  event.target.value = '';
 }
 function editPersonelModal(id){
   const u = id ? DATA.users.find(x=>x.id===id) : {ad:'', email:'', gorebilecegiMusteriler:[]};
@@ -2335,4 +2395,6 @@ window.urunDetayCsvIndir = urunDetayCsvIndir;
 window.verileriYenile = verileriYenile;
 window.whatsappGonderListeden = whatsappGonderListeden;
 window.whatsappMesajiAc = whatsappMesajiAc;
+window.yedekAl = yedekAl;
+window.yedekYukle = yedekYukle;
 window.yeniKayitBildirimGonder = yeniKayitBildirimGonder;
